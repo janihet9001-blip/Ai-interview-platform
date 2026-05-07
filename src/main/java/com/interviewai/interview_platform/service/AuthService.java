@@ -39,10 +39,10 @@ public class AuthService {
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
-        userRepository.save(user);
+        user = userRepository.save(user);
 
         String token = jwtUtil.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getEmail(), user.getFullName(), user.getRole().name());
+        return new AuthResponse(user.getId(), token, user.getEmail(), user.getFullName(), user.getRole().name());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -57,6 +57,6 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String token = jwtUtil.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getEmail(), user.getFullName(), user.getRole().name());
+        return new AuthResponse(user.getId(), token, user.getEmail(), user.getFullName(), user.getRole().name());
     }
 }

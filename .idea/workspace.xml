@@ -5,6 +5,56 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dead63d0-8628-40c8-a60f-3cdf2db55887" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/compiler.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/encodings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/interview-platform.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/jarRepositories.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/.idea/vcs.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/.gitattributes" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/.mvn/wrapper/maven-wrapper.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/mvnw" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/mvnw.cmd" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/pom.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/InterviewPlatformApplication.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/config/CorsConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/config/SecurityConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/controller/AuthController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/controller/InterviewController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/dto/AnswerMessage.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/dto/AuthResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/dto/FeedbackResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/dto/LoginRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/dto/RegisterRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/model/InterviewSession.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/model/Question.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/model/QuestionBank.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/model/User.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/repository/QuestionBankRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/repository/QuestionRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/repository/SessionRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/repository/UserRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/security/JwtFilter.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/security/JwtUtil.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/service/AuthService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/service/EvaluationService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/service/InterviewService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/service/UserDetailsServiceImpl.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/util/QuestionSeeder.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/websocket/InterviewWebSocketController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/com/interviewai/interview_platform/websocket/WebSocketConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/main/java/controller.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/interview-platform/src/test/java/com/interviewai/interview_platform/InterviewPlatformApplicationTests.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/untitled/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/untitled/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/untitled/.idea/encodings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/untitled/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/untitled/pom.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Backend/untitled/src/main/java/org/example/Main.java" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/Frontend/interview-frontend" beforeDir="false" afterPath="$PROJECT_DIR$/Frontend/interview-frontend" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Frontend/interview-frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/Frontend/interview-frontend/package-lock.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Frontend/interview-frontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/Frontend/interview-frontend/package.json" afterDir="false" />
@@ -54,9 +104,27 @@
     "git-widget-placeholder": "main",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "E:/interview-platform",
+    "project.structure.last.edited": "Modules",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
     "settings.editor.selected.configurable": "reference.projectsettings.compiler.annotationProcessors"
   }
 }]]></component>
+  <component name="RunManager">
+    <configuration name="InterviewPlatformApplication" type="Application" factoryName="Application" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="com.interviewai.interview_platform.InterviewPlatformApplication" />
+      <module name="interview-platform (1)" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.interviewai.interview_platform.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>

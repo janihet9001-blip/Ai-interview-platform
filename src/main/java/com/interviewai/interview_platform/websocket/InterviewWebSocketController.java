@@ -1,5 +1,6 @@
 package com.interviewai.interview_platform.websocket;
 
+import com.interviewai.interview_platform.dto.TypingMessage;
 import com.interviewai.interview_platform.dto.AnswerMessage;
 import com.interviewai.interview_platform.dto.FeedbackResponse;
 import com.interviewai.interview_platform.model.InterviewSession;
@@ -62,7 +63,10 @@ public class InterviewWebSocketController {
         question.setScore(result.score());
         questionRepository.save(question);
 
-        // 5. Update session total score
+        // 5. Reload session fresh from DB to get updated questions
+        session = sessionRepository.findById(answerMessage.getSessionId()).orElse(session);
+
+        // 6. Update session total score
         int totalScore = session.getQuestions()
                 .stream()
                 .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
@@ -70,13 +74,13 @@ public class InterviewWebSocketController {
 
         session.setTotalScore(totalScore);
 
-        // 6. Count how many questions answered
+        // 7. Count how many questions answered
         long answeredCount = session.getQuestions()
                 .stream()
                 .filter(q -> q.getUserAnswer() != null)
                 .count();
 
-        // 7. Check if session is completed
+        // 8. Check if session is completed
         boolean sessionCompleted = answeredCount >= session.getTotalQuestions();
 
         if (sessionCompleted) {
@@ -85,7 +89,7 @@ public class InterviewWebSocketController {
 
         sessionRepository.save(session);
 
-        // 8. Build feedback response
+        // 9. Build feedback response
         FeedbackResponse response = new FeedbackResponse(
                 question.getId(),
                 result.score(),
@@ -95,12 +99,21 @@ public class InterviewWebSocketController {
                 (int) answeredCount
         );
 
-        // 9. Send feedback back to frontend
+        // 10. Send feedback back to candidate
         messagingTemplate.convertAndSend(
                 "/topic/feedback/" + answerMessage.getSessionId(),
                 response
         );
 
         log.info("Feedback sent for session: {}", answerMessage.getSessionId());
+    }
+
+    // Receives live typing from candidate and forwards to recruiter
+    @MessageMapping("/typing")
+    public void handleTyping(TypingMessage typingMessage) {
+        messagingTemplate.convertAndSend(
+                "/topic/typing/" + typingMessage.getSessionId(),
+                typingMessage
+        );
     }
 }

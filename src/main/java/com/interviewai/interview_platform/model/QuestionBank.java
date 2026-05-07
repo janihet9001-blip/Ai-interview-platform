@@ -21,8 +21,8 @@ public class QuestionBank {
     @Enumerated(EnumType.STRING)
     private Difficulty difficulty;
 
-    private String category;   // "Core Java", "OOP", "Collections", "Spring"
-    private String jobRole;    // "JAVA_DEVELOPER", "REACT_DEVELOPER" etc.
+    private String category;
+    private String jobRole;
 
     public enum Difficulty {
         EASY, MEDIUM, HARD
