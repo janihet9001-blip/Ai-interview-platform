@@ -1,5 +1,7 @@
 package com.interviewai.interview_platform.websocket;
 
+import com.interviewai.interview_platform.dto.PauseMessage;
+import com.interviewai.interview_platform.dto.RecruiterQuestion;
 import com.interviewai.interview_platform.dto.TypingMessage;
 import com.interviewai.interview_platform.dto.AnswerMessage;
 import com.interviewai.interview_platform.dto.FeedbackResponse;
@@ -115,5 +117,23 @@ public class InterviewWebSocketController {
                 "/topic/typing/" + typingMessage.getSessionId(),
                 typingMessage
         );
+    }
+    // Receives custom question from recruiter and forwards to candidate
+    @MessageMapping("/recruiter-question")
+    public void handleRecruiterQuestion(RecruiterQuestion recruiterQuestion) {
+        messagingTemplate.convertAndSend(
+                "/topic/recruiter-question/" + recruiterQuestion.getSessionId(),
+                recruiterQuestion
+        );
+        log.info("Recruiter question sent to session: {}", recruiterQuestion.getSessionId());
+    }
+    // Recruiter pauses or resumes the interview
+    @MessageMapping("/pause")
+    public void handlePause(PauseMessage pauseMessage) {
+        messagingTemplate.convertAndSend(
+                "/topic/pause/" + pauseMessage.getSessionId(),
+                pauseMessage
+        );
+        log.info("Session {} - action: {}", pauseMessage.getSessionId(), pauseMessage.getAction());
     }
 }
