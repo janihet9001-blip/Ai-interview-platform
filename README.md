@@ -380,7 +380,7 @@ spring.datasource.hikari.keepalive-time=60000
 
 ---
 
-# 📸 Screens
+# Screens
 
 ## Included Screens
 
@@ -394,7 +394,7 @@ spring.datasource.hikari.keepalive-time=60000
 
 ---
 
-# 🔮 Future Improvements
+#  Future Improvements
 
 * Resume upload + parsing
 * AI-generated interview questions
