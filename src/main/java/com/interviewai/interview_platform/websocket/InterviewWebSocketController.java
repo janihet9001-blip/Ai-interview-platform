@@ -1,5 +1,6 @@
 package com.interviewai.interview_platform.websocket;
 
+import java.time.LocalDateTime;
 import com.interviewai.interview_platform.dto.PauseMessage;
 import com.interviewai.interview_platform.dto.RecruiterQuestion;
 import com.interviewai.interview_platform.dto.TypingMessage;
@@ -83,11 +84,7 @@ public class InterviewWebSocketController {
                 .count();
 
         // 8. Check if session is completed
-        boolean sessionCompleted = answeredCount >= session.getTotalQuestions();
-
-        if (sessionCompleted) {
-            session.setStatus(Status.COMPLETED);
-        }
+        boolean sessionCompleted = false;
 
         sessionRepository.save(session);
 
@@ -127,9 +124,47 @@ public class InterviewWebSocketController {
         );
         log.info("Recruiter question sent to session: {}", recruiterQuestion.getSessionId());
     }
-    // Recruiter pauses or resumes the interview
     @MessageMapping("/pause")
     public void handlePause(PauseMessage pauseMessage) {
+
+        // If recruiter clicked Stop — end the interview properly
+        if ("STOP".equals(pauseMessage.getAction())) {
+
+            // Mark session as COMPLETED in DB
+            InterviewSession session = sessionRepository
+                    .findById(pauseMessage.getSessionId())
+                    .orElse(null);
+
+            if (session != null) {
+                // Count how many questions were actually answered
+                long answeredCount = session.getQuestions()
+                        .stream()
+                        .filter(q -> q.getUserAnswer() != null)
+                        .count();
+
+                int totalScore = session.getQuestions()
+                        .stream()
+                        .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
+                        .sum();
+
+                session.setStatus(Status.COMPLETED);
+                session.setTotalScore(totalScore);
+                session.setTotalQuestions((int) answeredCount);
+                session.setCompletedAt(LocalDateTime.now());
+                sessionRepository.save(session);
+            }
+
+            // Tell candidate interview is over
+            messagingTemplate.convertAndSend(
+                    "/topic/end/" + pauseMessage.getSessionId(),
+                    pauseMessage
+            );
+
+            log.info("Interview STOPPED by recruiter — session: {}", pauseMessage.getSessionId());
+            return;
+        }
+
+        // Otherwise normal pause/resume/continue
         messagingTemplate.convertAndSend(
                 "/topic/pause/" + pauseMessage.getSessionId(),
                 pauseMessage

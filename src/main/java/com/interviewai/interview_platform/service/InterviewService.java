@@ -30,14 +30,14 @@ public class InterviewService {
         session.setJobRole(jobRole);
         session.setStatus(InterviewSession.Status.IN_PROGRESS);
         session.setStartedAt(LocalDateTime.now());
-        session.setTotalQuestions(10);
+        session.setTotalQuestions(0);
         session.setTotalScore(0);
 
         InterviewSession saved = sessionRepository.save(session);
 
         // Pick 10 random questions from question bank
         List<QuestionBank> bankQuestions =
-                questionBankRepository.findRandomByJobRole(jobRole, 10);
+                questionBankRepository.findRandomByJobRole(jobRole, 50);
 
         List<Question> questions = new ArrayList<>();
         for (int i = 0; i < bankQuestions.size(); i++) {
