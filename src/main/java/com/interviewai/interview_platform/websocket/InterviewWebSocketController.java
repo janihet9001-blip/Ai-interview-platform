@@ -1,6 +1,8 @@
 package com.interviewai.interview_platform.websocket;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import com.interviewai.interview_platform.dto.PauseMessage;
 import com.interviewai.interview_platform.dto.RecruiterQuestion;
 import com.interviewai.interview_platform.dto.TypingMessage;
@@ -31,8 +33,7 @@ public class InterviewWebSocketController {
     @MessageMapping("/answer")
     public void handleAnswer(AnswerMessage answerMessage) {
 
-        log.info("Received answer for question ID: {}",
-                answerMessage.getQuestionId());
+        log.info("Received answer for question ID: {}", answerMessage.getQuestionId());
 
         // 1. Find the question
         Question question = questionRepository
@@ -66,7 +67,7 @@ public class InterviewWebSocketController {
         question.setScore(result.score());
         questionRepository.save(question);
 
-        // 5. Reload session fresh from DB to get updated questions
+        // 5. Reload session fresh from DB
         session = sessionRepository.findById(answerMessage.getSessionId()).orElse(session);
 
         // 6. Update session total score
@@ -74,7 +75,6 @@ public class InterviewWebSocketController {
                 .stream()
                 .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
                 .sum();
-
         session.setTotalScore(totalScore);
 
         // 7. Count how many questions answered
@@ -84,11 +84,15 @@ public class InterviewWebSocketController {
                 .count();
 
         // 8. Check if session is completed
-        boolean sessionCompleted = false;
+        boolean sessionCompleted = answeredCount >= session.getTotalQuestions();
+        if (sessionCompleted) {
+            session.setStatus(Status.COMPLETED);
+            session.setCompletedAt(LocalDateTime.now());
+        }
 
         sessionRepository.save(session);
 
-        // 9. Build feedback response
+        // 9. Send feedback to candidate
         FeedbackResponse response = new FeedbackResponse(
                 question.getId(),
                 result.score(),
@@ -98,10 +102,21 @@ public class InterviewWebSocketController {
                 (int) answeredCount
         );
 
-        // 10. Send feedback back to candidate
         messagingTemplate.convertAndSend(
                 "/topic/feedback/" + answerMessage.getSessionId(),
                 response
+        );
+
+        // 10. Send typing update to recruiter live feed
+        Map<String, Object> typingUpdate = new HashMap<>();
+        typingUpdate.put("questionNumber", question.getQuestionNumber());
+        typingUpdate.put("questionText", question.getQuestiontext());
+        typingUpdate.put("currentAnswer", answerMessage.getUserAnswer());
+        typingUpdate.put("status", "SUBMITTED");
+
+        messagingTemplate.convertAndSend(
+                "/topic/typing/" + answerMessage.getSessionId(),
+                typingUpdate
         );
 
         log.info("Feedback sent for session: {}", answerMessage.getSessionId());
@@ -115,6 +130,7 @@ public class InterviewWebSocketController {
                 typingMessage
         );
     }
+
     // Receives custom question from recruiter and forwards to candidate
     @MessageMapping("/recruiter-question")
     public void handleRecruiterQuestion(RecruiterQuestion recruiterQuestion) {
@@ -124,19 +140,17 @@ public class InterviewWebSocketController {
         );
         log.info("Recruiter question sent to session: {}", recruiterQuestion.getSessionId());
     }
+
     @MessageMapping("/pause")
     public void handlePause(PauseMessage pauseMessage) {
 
-        // If recruiter clicked Stop — end the interview properly
         if ("STOP".equals(pauseMessage.getAction())) {
 
-            // Mark session as COMPLETED in DB
             InterviewSession session = sessionRepository
                     .findById(pauseMessage.getSessionId())
                     .orElse(null);
 
             if (session != null) {
-                // Count how many questions were actually answered
                 long answeredCount = session.getQuestions()
                         .stream()
                         .filter(q -> q.getUserAnswer() != null)
@@ -154,7 +168,6 @@ public class InterviewWebSocketController {
                 sessionRepository.save(session);
             }
 
-            // Tell candidate interview is over
             messagingTemplate.convertAndSend(
                     "/topic/end/" + pauseMessage.getSessionId(),
                     pauseMessage
@@ -164,7 +177,6 @@ public class InterviewWebSocketController {
             return;
         }
 
-        // Otherwise normal pause/resume/continue
         messagingTemplate.convertAndSend(
                 "/topic/pause/" + pauseMessage.getSessionId(),
                 pauseMessage

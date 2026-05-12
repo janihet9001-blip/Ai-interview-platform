@@ -5,7 +5,7 @@ public class TypingMessage {
     private Long sessionId;
     private Long questionId;
     private String questionText;
-    private int questionNumber;
+    private String questionNumber;  // ← changed from int to String
     private String currentAnswer;
     private String status;
 
@@ -18,8 +18,8 @@ public class TypingMessage {
     public String getQuestionText() { return questionText; }
     public void setQuestionText(String questionText) { this.questionText = questionText; }
 
-    public int getQuestionNumber() { return questionNumber; }
-    public void setQuestionNumber(int questionNumber) { this.questionNumber = questionNumber; }
+    public String getQuestionNumber() { return questionNumber; }
+    public void setQuestionNumber(String questionNumber) { this.questionNumber = questionNumber; }
 
     public String getCurrentAnswer() { return currentAnswer; }
     public void setCurrentAnswer(String currentAnswer) { this.currentAnswer = currentAnswer; }
