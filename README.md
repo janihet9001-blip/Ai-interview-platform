@@ -8,7 +8,7 @@ The platform simulates real technical interviews with:
 * Real-time recruiter monitoring
 * Voice interaction
 * Live typing feed
-* Recruiter-controlled interview flow 
+* Recruiter-controlled interview flows
 
 Designed with a modern dark UI inspired by **Stripe** and **Vercel**.
 
