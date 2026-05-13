@@ -8,6 +8,7 @@ import com.interviewai.interview_platform.dto.RecruiterQuestion;
 import com.interviewai.interview_platform.dto.TypingMessage;
 import com.interviewai.interview_platform.dto.AnswerMessage;
 import com.interviewai.interview_platform.dto.FeedbackResponse;
+import com.interviewai.interview_platform.dto.ProctoringEventDTO;
 import com.interviewai.interview_platform.model.InterviewSession;
 import com.interviewai.interview_platform.model.Question;
 import com.interviewai.interview_platform.repository.SessionRepository;
@@ -77,18 +78,14 @@ public class InterviewWebSocketController {
                 .sum();
         session.setTotalScore(totalScore);
 
-        // 7. Count how many questions answered
+        // 7. Count how many questions answered (exclude recruiter questions marked 999)
         long answeredCount = session.getQuestions()
                 .stream()
-                .filter(q -> q.getUserAnswer() != null)
+                .filter(q -> q.getUserAnswer() != null && q.getQuestionNumber() != 999)
                 .count();
 
-        // 8. Check if session is completed
-        boolean sessionCompleted = answeredCount >= session.getTotalQuestions();
-        if (sessionCompleted) {
-            session.setStatus(Status.COMPLETED);
-            session.setCompletedAt(LocalDateTime.now());
-        }
+        // 8. Session only completes when recruiter clicks Stop — never auto
+        boolean sessionCompleted = false;
 
         sessionRepository.save(session);
 
@@ -134,6 +131,21 @@ public class InterviewWebSocketController {
     // Receives custom question from recruiter and forwards to candidate
     @MessageMapping("/recruiter-question")
     public void handleRecruiterQuestion(RecruiterQuestion recruiterQuestion) {
+
+        // Save recruiter question to DB so it appears in results
+        InterviewSession session = sessionRepository
+                .findById(recruiterQuestion.getSessionId())
+                .orElse(null);
+
+        if (session != null) {
+            Question q = new Question();
+            q.setQuestiontext(recruiterQuestion.getQuestion());
+            q.setQuestionNumber(999); // marker — excluded from completion count
+            q.setSession(session);
+            Question saved = questionRepository.save(q);
+            recruiterQuestion.setQuestionId(saved.getId());
+        }
+
         messagingTemplate.convertAndSend(
                 "/topic/recruiter-question/" + recruiterQuestion.getSessionId(),
                 recruiterQuestion
@@ -151,9 +163,10 @@ public class InterviewWebSocketController {
                     .orElse(null);
 
             if (session != null) {
+                // Count only real answered questions — exclude recruiter questions (999)
                 long answeredCount = session.getQuestions()
                         .stream()
-                        .filter(q -> q.getUserAnswer() != null)
+                        .filter(q -> q.getUserAnswer() != null && q.getQuestionNumber() != 999)
                         .count();
 
                 int totalScore = session.getQuestions()
@@ -163,7 +176,7 @@ public class InterviewWebSocketController {
 
                 session.setStatus(Status.COMPLETED);
                 session.setTotalScore(totalScore);
-                session.setTotalQuestions((int) answeredCount);
+                session.setTotalQuestions((int) answeredCount); // save actual answered count
                 session.setCompletedAt(LocalDateTime.now());
                 sessionRepository.save(session);
             }
@@ -182,5 +195,38 @@ public class InterviewWebSocketController {
                 pauseMessage
         );
         log.info("Session {} - action: {}", pauseMessage.getSessionId(), pauseMessage.getAction());
+    }
+
+    // Receives proctoring events from candidate and forwards to recruiter
+    @MessageMapping("/proctoring-event")
+    public void handleProctoringEvent(ProctoringEventDTO event) {
+        log.info("PROCTORING EVENT - Session: {}, Type: {}, Details: {}",
+                event.getSessionId(),
+                event.getEventType(),
+                event.getDetails()
+        );
+
+        if (event.getPastedText() != null && !event.getPastedText().isEmpty()) {
+            log.info("Pasted Text: {}",
+                    event.getPastedText().length() > 100 ?
+                            event.getPastedText().substring(0, 100) + "..." :
+                            event.getPastedText()
+            );
+        }
+
+        if (event.getQuestionText() != null && !event.getQuestionText().isEmpty()) {
+            log.info("Question: {}", event.getQuestionText());
+        }
+
+        if (event.getShortcutKey() != null) {
+            log.info("Shortcut Key: {}", event.getShortcutKey());
+        }
+
+        messagingTemplate.convertAndSend(
+                "/topic/proctoring",
+                event
+        );
+
+        log.info("Proctoring event broadcast to /topic/proctoring");
     }
 }

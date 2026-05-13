@@ -30,12 +30,12 @@ public class InterviewService {
         session.setJobRole(jobRole);
         session.setStatus(InterviewSession.Status.IN_PROGRESS);
         session.setStartedAt(LocalDateTime.now());
-        session.setTotalQuestions(0);
+        session.setTotalQuestions(0); // no fixed limit — updated on Stop with actual count
         session.setTotalScore(0);
 
         InterviewSession saved = sessionRepository.save(session);
 
-        // Pick 10 random questions from question bank
+        // Load 50 questions — recruiter decides when to stop
         List<QuestionBank> bankQuestions =
                 questionBankRepository.findRandomByJobRole(jobRole, 50);
 
