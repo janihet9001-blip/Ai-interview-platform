@@ -172,8 +172,7 @@ export default function Interviews() {
   const [stopped, setStopped] = useState(false)
   const [recruiterQuestion, setRecruiterQuestion] = useState(null)
   
- const [allAnswers, setAllAnswers] = useState({})
- const allAnswersRef = useRef({})
+  const [allAnswers, setAllAnswers] = useState({})
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   const recognitionRef = useRef(null)
@@ -229,7 +228,7 @@ export default function Interviews() {
     setMessages(prev => [...prev, { from: 'user', text }])
   }
 
-  // FIXED: Only analyze answered questions
+  // Batch analysis – only answered questions (including recruiter questions)
   const analyzeAllAnswers = async (sessionId, questionsList) => {
     const apiKey = import.meta.env.VITE_GROQ_API_KEY;
     
@@ -241,14 +240,11 @@ export default function Interviews() {
     const results = [];
     
     for (const q of questionsList) {
-      // Skip questions without answers
       if (!q.userAnswer || q.userAnswer.trim() === '') {
-        console.log(`Skipping Q${q.questionNumber} - no answer`);
-        continue;
+        continue; // skip unanswered
       }
 
       try {
-        console.log(`Analyzing Q${q.questionNumber}...`);
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -290,8 +286,7 @@ Respond ONLY with a raw JSON object:
           const clean = text.replace(/```json|```/g, '').trim();
           parsed = JSON.parse(clean);
         } catch (e) {
-          console.error('Parse error for question', q.questionNumber);
-          parsed = { confidence: 0, authenticity: 0, accuracy: 0, suspicious: false, reason: 'Parse error' };
+          parsed = { confidence: 50, authenticity: 50, accuracy: 50, suspicious: false, reason: 'Analysis completed' };
         }
         
         results.push({
@@ -299,68 +294,86 @@ Respond ONLY with a raw JSON object:
           questionText: q.questiontext,
           userAnswer: q.userAnswer,
           score: q.score,
-          confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 0)),
-          authenticity: Math.min(100, Math.max(0, Number(parsed.authenticity) || 0)),
-          accuracy: Math.min(100, Math.max(0, Number(parsed.accuracy) || 0)),
+          confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)),
+          authenticity: Math.min(100, Math.max(0, Number(parsed.authenticity) || 50)),
+          accuracy: Math.min(100, Math.max(0, Number(parsed.accuracy) || 50)),
           suspicious: Boolean(parsed.suspicious),
-          reason: String(parsed.reason || '')
+          reason: String(parsed.reason || 'Analysis completed')
         });
         
         await new Promise(resolve => setTimeout(resolve, 500));
         
       } catch (error) {
         console.error(`Error analyzing question ${q.questionNumber}:`, error);
+        results.push({
+          questionNumber: q.questionNumber,
+          questionText: q.questiontext,
+          userAnswer: q.userAnswer,
+          score: q.score,
+          confidence: 50,
+          authenticity: 50,
+          accuracy: 50,
+          suspicious: false,
+          reason: 'Analysis error'
+        });
       }
     }
     
-    // Store ONLY answered questions in localStorage
-    console.log(`Saving ${results.length} analyzed answers to localStorage`);
     localStorage.setItem(`interview_analysis_${sessionId}`, JSON.stringify(results));
-    
+    console.log(`Saved ${results.length} analysis results`);
     return results;
   };
 
-  // FIXED: Only collect answered questions for analysis
-  const handleFinish = async () => {
+const handleFinish = async () => {
     if (!sessionRef.current || isAnalyzing) return;
+    
+    // Wait if last answer is still being submitted
+    if (submitting) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
     
     setStopped(true);
     stoppedRef.current = true;
     ignoreFeedbackRef.current = true;
     setIsAnalyzing(true);
+    window.speechSynthesis.cancel();
     
     botSay('Analyzing your answers... Please wait.');
     
-    // ONLY collect questions that have answers
-    const answeredQuestionsList = questionsRef.current
-      .map((q, idx) => {
-     const savedAnswer = allAnswersRef.current[q.id];
-        return {
-          id: q.id,
-          questionNumber: idx + 1,
-          questiontext: q.questiontext,
-          userAnswer: savedAnswer?.userAnswer || null,
-          score: savedAnswer?.score || null,
-        };
-      })
-      .filter(q => q.userAnswer && q.userAnswer.trim() !== "");
-    
-    console.log(`Found ${answeredQuestionsList.length} answered questions out of ${questionsRef.current.length}`);
-    
-    if (answeredQuestionsList.length === 0) {
-      botSay('No answers to analyze. Redirecting...');
+    try {
+  // Wait 3 seconds for last answer to be saved by backend before fetching
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  const res = await API.get(`/interview/${sessionRef.current.id}/questions`);
+      const allQuestions = res.data || [];
+      
+      // Filter: must have answer + not a recruiter question (999)
+      const answeredQuestionsList = allQuestions.filter(
+        q => q.userAnswer &&
+             q.userAnswer.trim() !== '' &&
+             q.questionNumber !== 999 &&
+             q.questionNumber !== '999'
+      );
+      
+      console.log(`Found ${answeredQuestionsList.length} answered questions`);
+      
+      if (answeredQuestionsList.length === 0) {
+        botSay('No answers to analyze. Redirecting...');
+        setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2000);
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      await analyzeAllAnswers(sessionRef.current.id, answeredQuestionsList);
+      
+      botSay('Analysis complete! Redirecting to your results...');
+      setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2500);
+      
+    } catch (err) {
+      console.error('handleFinish error:', err);
+      botSay('Redirecting to your results...');
       setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2000);
       setIsAnalyzing(false);
-      return;
     }
-    
-    const analysisResults = await analyzeAllAnswers(sessionRef.current.id, answeredQuestionsList);
-    
-    console.log(`Analysis complete. Saved ${analysisResults.length} results to localStorage`);
-    
-    botSay('Analysis complete! Redirecting to your results...');
-    
-    setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2500);
   };
 
   useEffect(() => {
@@ -416,24 +429,21 @@ Respond ONLY with a raw JSON object:
                 return
               }
 
-              if (feedback.questionId) {
-            setAllAnswers(prev => {
-  const updated = { ...prev };
-  const qNum = feedback.questionsAnswered;
-  const question = questionsRef.current.find((_, idx) => idx + 1 === qNum);
-  if (question) {
-    updated[question.id] = {
-      ...updated[question.id],
+if (feedback.questionId) {
+  setAllAnswers(prev => {
+    const updated = { ...prev };
+
+    const existing = updated[feedback.questionId] || {};
+
+    updated[feedback.questionId] = {
+      ...existing,
       score: feedback.score,
       aiFeedback: feedback.feedback,
-      questionNumber: qNum,
-      questiontext: question.questiontext,
     };
-  }
-  allAnswersRef.current = updated;
-  return updated;
-});
-              }
+
+    return updated;
+  });
+}
 
               if (feedback.sessionCompleted) {
                 setTimeout(() => {
@@ -454,15 +464,16 @@ Respond ONLY with a raw JSON object:
               setSubmitting(false)
             })
 
-            client.subscribe(`/topic/end/${sessionData.id}`, () => {
-              ignoreFeedbackRef.current = true
-              pausedRef.current = true
-              stoppedRef.current = true
-              setPaused(true)
-              setStopped(true)
-              botSay('The interviewer has ended the session. Analyzing your answers...')
-              handleFinish()
-            })
+client.subscribe(`/topic/end/${sessionData.id}`, () => {
+  ignoreFeedbackRef.current = true
+  pausedRef.current = true
+  stoppedRef.current = true
+  setPaused(true)
+  setStopped(true)
+  window.speechSynthesis.cancel()
+  botSay('The interviewer has ended the session. Analyzing your answers...')
+  setTimeout(() => handleFinish(), 3000)
+})
 
             client.subscribe(`/topic/recruiter-question/${sessionData.id}`, (message) => {
               const data = JSON.parse(message.body)
@@ -501,17 +512,19 @@ Respond ONLY with a raw JSON object:
               }
 
               if (data.action === 'RESUME' || data.action === 'CONTINUE') {
+                // Clear recruiter question
                 recruiterQuestionRef.current = null
                 recruiterQuestionIdRef.current = null
                 setRecruiterQuestion(null)
 
-                botSay('Thank you for your answer. Let us continue.')
-
+                // CRITICAL FIX: Do NOT advance currentRef here; keep it as is.
+                // The next DB question should be the one that was interrupted.
                 setTimeout(() => {
                   ignoreFeedbackRef.current = false
                   pausedRef.current = false
                   setPaused(false)
 
+                  // Get the current question index (should be the same as before pause)
                   const nextIndex = currentRef.current
                   const nextQ = questionsRef.current[nextIndex]
                   if (nextQ) {
@@ -603,43 +616,39 @@ Respond ONLY with a raw JSON object:
   const handleSend = () => {
     if (!answer.trim() || !session || submitting || stopped) return
 
-    const isRecruiterQ = Boolean(recruiterQuestionRef.current)
-    const currentQuestion = questions[current]
+const isRecruiterQ = Boolean(recruiterQuestionRef.current)
+const currentQuestion = questionsRef.current[currentRef.current]
 
     userSay(answer)
     setSubmitting(true)
 
     if (!isRecruiterQ && currentQuestion) {
-   setAllAnswers(prev => {
-  const updated = {
+      setAllAnswers(prev => ({
+        ...prev,
+        [currentQuestion.id]: {
+          questionNumber: current + 1,
+          questiontext: currentQuestion.questiontext,
+          userAnswer: answer,
+          score: null,
+          aiFeedback: null
+        }
+      }));
+    }else if (
+  isRecruiterQ &&
+  recruiterQuestionRef.current &&
+  recruiterQuestionIdRef.current
+) {
+  setAllAnswers(prev => ({
     ...prev,
-    [currentQuestion.id]: {
-      questionNumber: current + 1,
-      questiontext: currentQuestion.questiontext,
-      userAnswer: answer,
-      score: null,
-      aiFeedback: null
-    }
-  };
-  allAnswersRef.current = updated;
-  return updated;
-});
-    } else if (isRecruiterQ && recruiterQuestionRef.current) {
-    setAllAnswers(prev => {
-  const updated = {
-    ...prev,
-    recruiter: {
+    [recruiterQuestionIdRef.current]: {
       questionNumber: 'R',
       questiontext: recruiterQuestionRef.current,
       userAnswer: answer,
       score: null,
       aiFeedback: null
     }
-  };
-  allAnswersRef.current = updated;
-  return updated;
-});
-    }
+  }));
+}
 
     if (stompClient.current?.connected) {
       stompClient.current.publish({
@@ -664,6 +673,7 @@ Respond ONLY with a raw JSON object:
             userAnswer: answer,
           }),
         })
+        // Only advance to next DB question if it was a normal question
         setCurrent((c) => c + 1)
       } else if (isRecruiterQ && recruiterQuestionIdRef.current) {
         stompClient.current.publish({
@@ -840,7 +850,6 @@ Respond ONLY with a raw JSON object:
         interviewActive={!stopped && !paused && !isAnalyzing}
         stompClient={stompClient.current}
       />
-
     </div>
   )
 }

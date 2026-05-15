@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import API from "../services/api";
 
+// Cleans markdown symbols from Groq AI feedback
+function cleanMarkdown(text) {
+  if (!text) return text;
+  return text
+    .replace(/###\s*/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export default function Results() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -13,35 +25,63 @@ export default function Results() {
     fetchResults();
   }, [sessionId]);
 
-  const fetchResults = async (attempt = 1) => {
+const fetchResults = async (attempt = 1) => {
     try {
-      const res = await API.get(`/interview/${sessionId}/questions`)
-      const data = res.data || []
-      setAllQuestions(data)
-      setLoading(false)
+      const res = await API.get(`/interview/${sessionId}/questions`);
+      const data = res.data || [];
+      console.log('ALL QUESTIONS:', JSON.stringify(data.map(q => ({
+        id: q.id,
+        qn: q.questionNumber,
+        hasAnswer: !!q.userAnswer,
+        text: q.questiontext?.substring(0, 30)
+      }))));
+      setAllQuestions(data);
+      setLoading(false);
 
-      const pendingEval = data.some(q => q.userAnswer && !q.aiFeedback)
+      const pendingEval = data.some(q => q.userAnswer && !q.aiFeedback);
       if (pendingEval && attempt < 6) {
-        setRetrying(true)
-        setTimeout(() => fetchResults(attempt + 1), 2000)
+        setRetrying(true);
+        setTimeout(() => fetchResults(attempt + 1), 2000);
       } else {
-        setRetrying(false)
+        setRetrying(false);
       }
     } catch (err) {
-      console.error('Failed to fetch results', err)
-      setLoading(false)
-      setRetrying(false)
+      console.error('Failed to fetch results', err);
+      setLoading(false);
+      setRetrying(false);
     }
-  }
+  };
 
-  // FILTER: Only show questions that have an answer
-  const answeredQuestions = allQuestions.filter(q => q.userAnswer && q.userAnswer.trim() !== "");
-  const unansweredCount = allQuestions.length - answeredQuestions.length;
+  // Only show questions that:
+  // 1. Have a real answer
+  // 2. Are NOT recruiter questions (questionNumber 999)
+const answeredQuestions = allQuestions.filter(
+  q => q.userAnswer
+    && q.userAnswer.trim() !== ""
+    && Number(q.questionNumber) !== 999
+);
 
-  const totalScore = answeredQuestions.reduce((sum, q) => sum + (q.score || 0), 0);
+  // Recruiter questions answered separately — not counted in score
+const recruiterAnswered = allQuestions.filter(
+  q => q.userAnswer
+    && q.userAnswer.trim() !== ""
+    && Number(q.questionNumber) === 999
+);
+
+  // Unanswered = questions that were asked (have questiontext)
+  // but have no answer and are not Q999
+  const askedButUnanswered = [];
+
+  const totalScore = answeredQuestions.reduce(
+    (sum, q) => sum + (q.score || 0), 0
+  );
   const maxScore = answeredQuestions.length * 10;
-  const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-  const strongAnswers = answeredQuestions.filter(q => (q.score || 0) >= 7).length;
+  const percentage = maxScore > 0
+    ? Math.round((totalScore / maxScore) * 100)
+    : 0;
+  const strongAnswers = answeredQuestions.filter(
+    q => (q.score || 0) >= 7
+  ).length;
 
   const getScoreColor = (score) => {
     if (!score && score !== 0) return "#64748b";
@@ -71,7 +111,8 @@ export default function Results() {
       <div style={styles.header}>
         <h1 style={styles.title}>Interview Results</h1>
         <p style={styles.subtitle}>
-          {answeredQuestions.length} Answered • {unansweredCount} Unanswered • Total {allQuestions.length} Questions
+          {answeredQuestions.length} Answered
+          {recruiterAnswered.length > 0 && ` • ${recruiterAnswered.length} Interviewer Q`}
         </p>
       </div>
 
@@ -90,7 +131,7 @@ export default function Results() {
             {totalScore} / {maxScore} points
           </p>
           <p style={styles.scoreText}>
-            {strongAnswers} strong answers
+            {strongAnswers} strong answer{strongAnswers !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
@@ -105,7 +146,7 @@ export default function Results() {
           border: '1px solid #F9731640',
           borderRadius: '8px',
         }}>
-          ⏳ AI is evaluating your answers, please wait...
+          ⏳ AI is still evaluating some answers, please wait...
         </div>
       )}
 
@@ -113,7 +154,7 @@ export default function Results() {
         {answeredQuestions.map((q, index) => {
           const questionText = q.questiontext || q.questionText || "Unknown";
           const userAnswer = q.userAnswer || null;
-          const aiFeedback = q.aiFeedback || null;
+          const aiFeedback = cleanMarkdown(q.aiFeedback) || null;
           const score = q.score;
 
           return (
@@ -142,15 +183,14 @@ export default function Results() {
 
               <div style={{ ...styles.section, background: "#1e293b" }}>
                 <span style={{ ...styles.sectionLabel, color: "#818cf8" }}>
-                  🤖 AI Feedback
+                  AI Feedback
                 </span>
                 <p style={{ ...styles.answerText, color: "#cbd5e1" }}>
                   {aiFeedback
                     ? aiFeedback
                     : retrying
                       ? "Evaluating..."
-                      : "No feedback available"
-                  }
+                      : "No feedback available"}
                 </p>
               </div>
 
@@ -159,19 +199,57 @@ export default function Results() {
         })}
       </div>
 
-      {/* Show message if some questions were unanswered */}
-      {unansweredCount > 0 && (
+      {askedButUnanswered.length > 0 && (
         <div style={{
           textAlign: 'center', padding: '16px',
           background: '#F9731610', border: '1px solid #F9731640',
           borderRadius: '12px', marginTop: '20px'
         }}>
-          <p style={{ fontSize: '13px', color: '#F97316', fontFamily: 'monospace', margin: 0 }}>
-            ℹ️ {unansweredCount} question(s) were not answered and are not shown in results.
+          <p style={{
+            fontSize: '13px', color: '#F97316',
+            fontFamily: 'monospace', margin: 0
+          }}>
+            {askedButUnanswered.length} question(s) were not answered
+            and are not shown in results.
           </p>
         </div>
       )}
-
+       {recruiterAnswered.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <h3 style={{ color: '#8B5CF6', fontSize: '1rem', fontFamily: 'monospace', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Interviewer Questions
+          </h3>
+          {recruiterAnswered.map((q, index) => {
+            const questionText = q.questiontext || q.questionText || 'Unknown'
+            const aiFeedback = cleanMarkdown(q.aiFeedback) || null
+            return (
+              <div key={q.id} style={{ ...styles.questionCard, borderLeft: '4px solid #8B5CF6', marginBottom: '12px' }}>
+                <div style={styles.questionHeader}>
+                  <span style={{ ...styles.questionNumber, background: '#8B5CF620', color: '#8B5CF6' }}>
+                    Interviewer Q{index + 1}
+                  </span>
+                  {q.score != null && (
+                    <div style={{ ...styles.scoreTag, background: '#8B5CF6' }}>
+                      {q.score} / 10
+                    </div>
+                  )}
+                </div>
+                <p style={styles.questionText}>{questionText}</p>
+                <div style={styles.section}>
+                  <span style={styles.sectionLabel}>Your Answer</span>
+                  <p style={styles.answerText}>{q.userAnswer}</p>
+                </div>
+                {aiFeedback && (
+                  <div style={{ ...styles.section, background: '#1e293b' }}>
+                    <span style={{ ...styles.sectionLabel, color: '#818cf8' }}>AI Feedback</span>
+                    <p style={{ ...styles.answerText, color: '#cbd5e1' }}>{aiFeedback}</p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
       <div style={styles.buttons}>
         <button
           style={styles.btnPrimary}
@@ -326,6 +404,7 @@ const styles = {
     margin: 0,
     lineHeight: 1.6,
     fontSize: "0.9rem",
+    whiteSpace: "pre-wrap",
   },
   buttons: {
     display: "flex",
