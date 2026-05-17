@@ -656,7 +656,7 @@ export default function RecruiterDashboard() {
               style={{
                 padding: '10px 20px', background: 'transparent', border: 'none',
                 borderBottom: activeTab === tab.id ? '2px solid #2563EB' : '2px solid transparent',
-                color: activeTab === tab.id ? '#60A5FA' : 'var(--text-dim)',
+                color: activeTab === tab.id ? '#60A5FA' : '#334155',
                 fontSize: '14px', fontWeight: activeTab === tab.id ? 700 : 400,
                 cursor: 'pointer', marginBottom: '-1px',
                 fontFamily: activeTab === tab.id ? 'var(--font-display)' : 'var(--font-body)',
@@ -690,6 +690,7 @@ export default function RecruiterDashboard() {
                         style={{
                           padding: '14px 16px', borderRadius: 'var(--radius)',
                           border: `1px solid ${selectedCandidate?.id === c.id ? '#2563EB60' : hoveredCandidate === c.id ? 'var(--border-bright)' : 'var(--border)'}`,
+                          borderLeft: selectedCandidate?.id === c.id ? '3px solid #2563EB' : undefined,
                           background: selectedCandidate?.id === c.id ? '#2563EB10' : 'var(--surface2)',
                           cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
                           alignItems: 'center', transition: 'all 0.2s ease',
@@ -860,7 +861,14 @@ export default function RecruiterDashboard() {
               <div style={{ flex: 1 }}>
                 {!activeSessionId ? (
                   <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>No active session</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', opacity: 0.4 }}>
+  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B">
+    <rect x="2" y="3" width="20" height="14" rx="2"/>
+    <path d="M8 21h8M12 17v4"/>
+  </svg>
+  <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
+  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
+</div>
                   </div>
                 ) : Object.keys(liveFeed).length === 0 ? (
                   <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

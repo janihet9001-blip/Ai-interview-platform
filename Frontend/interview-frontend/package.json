@@ -14,6 +14,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "axios": "^1.16.0",
     "framer-motion": "^12.38.0",
+    "lucide-react": "^1.16.0",
     "mammoth": "^1.12.0",
     "pdfjs-dist": "^5.7.284",
     "react": "^19.2.5",
@@ -22,9 +23,11 @@
     "react-router-dom": "^7.15.0",
     "recharts": "^3.8.1",
     "sockjs-client": "^1.6.1",
+    "styled-jsx": "^5.1.7",
     "tailwindcss": "^4.2.4"
   },
   "devDependencies": {
+    "@babel/plugin-syntax-jsx": "^7.28.6",
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

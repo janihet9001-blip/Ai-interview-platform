@@ -50,38 +50,42 @@ export default function WaitingRoom() {
     }}>
 
       {/* Animated rings */}
-      <div style={{ position: 'relative', width: '120px', height: '120px', marginBottom: '48px' }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{
-            position: 'absolute',
-            inset: `${i * -20}px`,
-            borderRadius: '50%',
-            border: '1px solid #2563EB',
-            opacity: 0.15 - i * 0.04,
-            animation: `pulse-glow ${2 + i * 0.5}s ease infinite`,
-          }} />
-        ))}
-
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #2563EB20, #06B6D420)',
-          border: '1px solid #2563EB40',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            border: '3px solid transparent',
-            borderTopColor: '#2563EB',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }} />
-        </div>
-      </div>
+{/* Premium dual-ring spinner */}
+<div style={{ position: 'relative', width: '120px', height: '120px', marginBottom: '48px' }}>
+  {/* Outer breathing ring */}
+  <div style={{
+    position: 'absolute', inset: '-16px',
+    borderRadius: '50%',
+    border: '1px solid rgba(37,99,235,0.12)',
+    animation: 'breathe 3s ease-in-out infinite',
+  }} />
+  {/* Middle static ring */}
+  <div style={{
+    position: 'absolute', inset: '-6px',
+    borderRadius: '50%',
+    border: '1px solid rgba(255,255,255,0.04)',
+  }} />
+  {/* Spinning ring */}
+  <div style={{
+    position: 'absolute', inset: 0,
+    borderRadius: '50%',
+    border: '1.5px solid rgba(255,255,255,0.05)',
+    borderTopColor: '#2563EB',
+    borderRightColor: 'rgba(6,182,212,0.4)',
+    animation: 'spin 1.8s linear infinite',
+  }} />
+  {/* Center glow dot */}
+  <div style={{
+    position: 'absolute',
+    top: '50%', left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '10px', height: '10px',
+    borderRadius: '50%',
+    background: '#2563EB',
+    boxShadow: '0 0 16px #2563EB, 0 0 32px rgba(37,99,235,0.4)',
+    animation: 'pulse-dot 1.5s ease-in-out infinite',
+  }} />
+</div>
 
       <div style={{ textAlign: 'center', animation: 'fadeUp 0.5s ease forwards' }}>
         <p style={{
@@ -124,13 +128,13 @@ export default function WaitingRoom() {
           borderRadius: '999px',
           marginBottom: '40px',
         }}>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: 'var(--cyan)',
-            animation: 'pulse-glow 1.5s ease infinite',
-          }} />
+<div style={{
+  width: '7px', height: '7px',
+  borderRadius: '50%',
+  background: '#06B6D4',
+  boxShadow: '0 0 8px #06B6D4',
+  animation: 'pulse-dot 1.5s ease-in-out infinite',
+}} />
 
           <span style={{
             fontFamily: 'var(--font-mono)',
