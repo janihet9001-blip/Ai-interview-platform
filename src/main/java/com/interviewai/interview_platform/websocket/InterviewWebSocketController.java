@@ -2,6 +2,7 @@ package com.interviewai.interview_platform.websocket;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import com.interviewai.interview_platform.dto.PauseMessage;
 import com.interviewai.interview_platform.dto.RecruiterQuestion;
@@ -46,7 +47,7 @@ public class InterviewWebSocketController {
             return;
         }
 
-        // 2. Find the session
+        // 2. Find the session — load ONCE, never reload again
         InterviewSession session = sessionRepository
                 .findById(answerMessage.getSessionId())
                 .orElse(null);
@@ -68,23 +69,35 @@ public class InterviewWebSocketController {
         question.setScore(result.score());
         questionRepository.save(question);
 
-        // 5. Reload session fresh from DB
-        session = sessionRepository.findById(answerMessage.getSessionId()).orElse(session);
+        // 5. Load questions from session ONCE
+        // IMPORTANT: after saving question above, the session's in-memory list
+        // still has the OLD question object. We update it manually here
+        // so answeredCount and totalScore are accurate without another DB call.
+        List<Question> allQuestions = session.getQuestions();
 
-        // 6. Update session total score
-        int totalScore = session.getQuestions()
+        for (int i = 0; i < allQuestions.size(); i++) {
+            if (allQuestions.get(i).getId().equals(question.getId())) {
+                allQuestions.set(i, question); // replace stale object with updated one
+                break;
+            }
+        }
+
+        // 6. Update total score using the now-accurate list
+        int totalScore = allQuestions
                 .stream()
                 .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
                 .sum();
         session.setTotalScore(totalScore);
 
-        // 7. Count how many questions answered (exclude recruiter questions marked 999)
-        long answeredCount = session.getQuestions()
+        // 7. Count answered — exclude recruiter questions (questionNumber = 999)
+        long answeredCount = allQuestions
                 .stream()
-                .filter(q -> q.getUserAnswer() != null && q.getQuestionNumber() != 999)
+                .filter(q -> q.getUserAnswer() != null
+                        && q.getUserAnswer().trim().length() > 0
+                        && q.getQuestionNumber() != 999)
                 .count();
 
-        // 8. Session only completes when recruiter clicks Stop — never auto
+        // 8. Session never auto-completes — recruiter decides when to stop
         boolean sessionCompleted = false;
 
         sessionRepository.save(session);
@@ -116,7 +129,8 @@ public class InterviewWebSocketController {
                 typingUpdate
         );
 
-        log.info("Feedback sent for session: {}", answerMessage.getSessionId());
+        log.info("Answer saved — session: {}, answered so far: {}",
+                answerMessage.getSessionId(), answeredCount);
     }
 
     // Receives live typing from candidate and forwards to recruiter
@@ -132,7 +146,6 @@ public class InterviewWebSocketController {
     @MessageMapping("/recruiter-question")
     public void handleRecruiterQuestion(RecruiterQuestion recruiterQuestion) {
 
-        // Save recruiter question to DB so it appears in results
         InterviewSession session = sessionRepository
                 .findById(recruiterQuestion.getSessionId())
                 .orElse(null);
@@ -163,22 +176,32 @@ public class InterviewWebSocketController {
                     .orElse(null);
 
             if (session != null) {
-                // Count only real answered questions — exclude recruiter questions (999)
-                long answeredCount = session.getQuestions()
+                // Load questions ONCE — use the list already in session
+                List<Question> allQuestions = session.getQuestions();
+
+                // Exclude recruiter questions (999) from answered count
+                long answeredCount = allQuestions
                         .stream()
-                        .filter(q -> q.getUserAnswer() != null && q.getQuestionNumber() != 999)
+                        .filter(q -> q.getUserAnswer() != null
+                                && q.getUserAnswer().trim().length() > 0
+                                && q.getQuestionNumber() != 999)
                         .count();
 
-                int totalScore = session.getQuestions()
+                // Only count scores from non-999 questions
+                int totalScore = allQuestions
                         .stream()
+                        .filter(q -> q.getQuestionNumber() != 999)
                         .mapToInt(q -> q.getScore() != null ? q.getScore() : 0)
                         .sum();
 
                 session.setStatus(Status.COMPLETED);
                 session.setTotalScore(totalScore);
-                session.setTotalQuestions((int) answeredCount); // save actual answered count
+                session.setTotalQuestions((int) answeredCount);
                 session.setCompletedAt(LocalDateTime.now());
                 sessionRepository.save(session);
+
+                log.info("Session COMPLETED — answered: {}, score: {}",
+                        answeredCount, totalScore);
             }
 
             messagingTemplate.convertAndSend(
