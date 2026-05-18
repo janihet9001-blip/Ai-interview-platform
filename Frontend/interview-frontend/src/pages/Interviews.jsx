@@ -174,7 +174,7 @@ export default function Interviews() {
   
   const [allAnswers, setAllAnswers] = useState({})
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-
+  const [showWarning, setShowWarning] = useState(false)
   const recognitionRef = useRef(null)
   const pausedRef = useRef(false)
   const stoppedRef = useRef(false)
@@ -536,7 +536,29 @@ client.subscribe(`/topic/end/${sessionData.id}`, () => {
                   }
                 }, 1500)
               }
-            })
+})
+
+          client.subscribe(`/topic/warning/${sessionData.id}`, (msg) => {
+            const data = JSON.parse(msg.body)
+            if (data.action === 'WARN') {
+              setShowWarning(true)
+              window.speechSynthesis.cancel()
+              setTimeout(() => setShowWarning(false), 10000)
+            }
+            if (data.action === 'END_FOR_CHEATING') {
+              setShowWarning(false)
+              setStopped(true)
+              stoppedRef.current = true
+              ignoreFeedbackRef.current = true
+              window.speechSynthesis.cancel()
+              botSay('Your interview has been terminated due to repeated violations.')
+              setTimeout(() => {
+                stompClient.current?.deactivate()
+                navigate(`/results/${sessionRef.current?.id}`, { replace: true })
+              }, 4000)
+            }
+          })
+
           },
 
           onStompError: () => {
@@ -544,7 +566,6 @@ client.subscribe(`/topic/end/${sessionData.id}`, () => {
             setSubmitting(false)
           },
         })
-
         client.activate()
         stompClient.current = client
       } catch {
@@ -717,8 +738,101 @@ const currentQuestion = questionsRef.current[currentRef.current]
 
   const isTextareaDisabled = submitting || stopped || isAnalyzing || (paused && !recruiterQuestionRef.current)
 
-  return (
+return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-body)' }}>
+
+      {/* Candidate warning overlay */}
+      {showWarning && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(6px)',
+          animation: 'fadeIn 0.3s ease',
+        }}>
+          <div style={{
+            background: '#0D1117',
+            border: '2px solid #EF4444',
+            borderRadius: '16px',
+            padding: '40px',
+            maxWidth: '440px',
+            width: '90%',
+            textAlign: 'center',
+            boxShadow: '0 0 80px rgba(239,68,68,0.35)',
+            animation: 'fadeUp 0.3s ease',
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, height: '4px',
+              background: 'linear-gradient(90deg, #EF4444, #F97316, #EF4444)',
+            }} />
+
+            <div style={{ fontSize: '52px', marginBottom: '16px' }}>⚠️</div>
+
+            <h2 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '22px', fontWeight: '800',
+              color: '#EF4444', marginBottom: '14px',
+            }}>
+              Warning — Activity Detected
+            </h2>
+
+            <p style={{
+              fontSize: '14px', color: '#CBD5E1',
+              lineHeight: '1.8', marginBottom: '20px',
+              fontFamily: 'var(--font-body)',
+            }}>
+              Suspicious activity has been detected and reported to the recruiter.
+              <br /><br />
+              This is your <strong style={{ color: '#EF4444', fontSize: '16px' }}>final warning</strong>.
+              <br />
+              <strong style={{ color: 'white' }}>
+                Any further violation will immediately terminate your interview.
+              </strong>
+            </p>
+
+            <div style={{
+              background: '#EF444415',
+              border: '1px solid #EF444440',
+              borderRadius: '8px',
+              padding: '10px 16px',
+              marginBottom: '24px',
+              fontSize: '12px',
+              color: '#FCA5A5',
+              fontFamily: 'var(--font-mono)',
+              lineHeight: '1.6',
+            }}>
+              The recruiter has been notified.<br />
+              Please return to your interview immediately.
+            </div>
+
+            <button
+              onClick={() => setShowWarning(false)}
+              style={{
+                padding: '12px 36px',
+                borderRadius: '10px',
+                background: '#EF4444',
+                color: 'white', border: 'none',
+                fontWeight: '700', fontSize: '14px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                width: '100%',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#DC2626'}
+              onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}
+            >
+              I understand — Return to Interview
+            </button>
+          </div>
+        </div>
+      )}
+
       <nav style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '0 32px', height: '60px',

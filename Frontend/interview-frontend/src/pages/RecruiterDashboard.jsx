@@ -15,6 +15,9 @@ const pctColor = (pct) =>
   pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
 
 export default function RecruiterDashboard() {
+  const [violationCount, setViolationCount] = useState(0)
+const [showEndPopup, setShowEndPopup] = useState(false)
+const [latestViolation, setLatestViolation] = useState(null)
   const [sessionSearch, setSessionSearch] = useState('')
 const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const { user, logout } = useAuth()
@@ -208,12 +211,29 @@ setCompletedSessions(completed.slice(0, 10))
           })
         })
 
-        client.subscribe(`/topic/proctoring`, (msg) => {
-          const event = JSON.parse(msg.body)
-          if (String(event.sessionId) === String(activeSessionId)) {
-            setProctoringAlerts((prev) => [event, ...prev].slice(0, 50))
-          }
+client.subscribe(`/topic/proctoring`, (msg) => {
+  const event = JSON.parse(msg.body)
+  if (String(event.sessionId) === String(activeSessionId)) {
+    setProctoringAlerts((prev) => [event, ...prev].slice(0, 50))
+
+    setViolationCount(prev => {
+      const newCount = prev + 1
+      if (newCount === 1) {
+        // First violation — send warning to candidate silently
+        stompClient.current?.publish({
+          destination: '/app/warning',
+          body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }),
         })
+      }
+      if (newCount >= 2) {
+        // Second violation — show end popup to admin
+        setLatestViolation(event)
+        setShowEndPopup(true)
+      }
+      return newCount
+    })
+  }
+})
       },
       onDisconnect: () => setWsConnected(false),
       onStompError: () => setWsConnected(false),
@@ -254,6 +274,49 @@ setCompletedSessions(completed.slice(0, 10))
         setStarting(false)
       })
   }
+
+const handleEndForCheating = () => {
+  if (!stompClient.current?.connected || !activeSessionId) return
+
+  // Step 1 — send warning END_FOR_CHEATING to candidate screen
+  stompClient.current.publish({
+    destination: '/app/warning',
+    body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }),
+  })
+
+  // Step 2 — also send STOP to backend so session is marked COMPLETED in DB
+  stompClient.current.publish({
+    destination: '/app/pause',
+    body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }),
+  })
+
+  setShowEndPopup(false)
+  setViolationCount(0)
+  setIsStopped(true)
+  setIsPaused(true)
+  setMessage('Interview terminated due to repeated violations.')
+  setMessageType('error')
+
+  setTimeout(() => {
+    setActiveSessionId(null)
+    setLiveFeed({})
+    setProctoringAlerts([])
+    setIsPaused(false)
+    setIsStopped(false)
+    setWsConnected(false)
+    setViolationCount(0)
+    // Refresh completed sessions list
+    api.get('/interview/all-sessions')
+      .then((res) => {
+        const completed = (res.data || [])
+          .filter(s => s.status === 'COMPLETED')
+          .sort((a, b) => b.id - a.id)
+        setAllCompletedSessions(completed)
+        setCompletedSessions(completed.slice(0, 10))
+      })
+      .catch(console.error)
+  }, 2000)
+}
 
   const handlePauseResume = () => {
     if (!stompClient.current?.connected || !activeSessionId || isStopped) return
@@ -683,6 +746,145 @@ setCompletedSessions(completed.slice(0, 10))
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: 'var(--font-body)' }}>
+
+      {/* Second violation popup */}
+{showEndPopup && (
+  <div style={{
+    position: 'fixed',
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingTop: '80px',
+    background: 'rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(4px)',
+    animation: 'fadeIn 0.2s ease',
+  }}>
+    <div style={{
+      background: '#0D1117',
+      border: '2px solid #EF4444',
+      borderRadius: '16px',
+      padding: '32px 36px',
+      maxWidth: '460px',
+      width: '90%',
+      boxShadow: '0 0 80px rgba(239,68,68,0.4)',
+      animation: 'fadeUp 0.3s ease',
+      position: 'relative',
+    }}>
+      {/* Red top bar */}
+      <div style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0,
+        height: '4px',
+        background: 'linear-gradient(90deg, #EF4444, #F97316)',
+        borderRadius: '16px 16px 0 0',
+      }} />
+
+      {/* Icon + title */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+        <div style={{
+          width: '44px', height: '44px',
+          borderRadius: '50%',
+          background: '#EF444420',
+          border: '2px solid #EF444460',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '20px', flexShrink: 0,
+        }}>🚨</div>
+        <div>
+          <h3 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '18px', fontWeight: '800',
+            color: '#EF4444', margin: 0,
+          }}>
+            Second Violation Detected
+          </h3>
+          <p style={{
+            fontSize: '12px', color: 'var(--text-dim)',
+            fontFamily: 'var(--font-mono)', margin: '2px 0 0',
+          }}>
+            Session #{activeSessionId} — {selectedCandidate?.fullName || 'Candidate'}
+          </p>
+        </div>
+      </div>
+
+      {/* Violation detail */}
+      {latestViolation && (
+        <div style={{
+          background: '#EF444410',
+          border: '1px solid #EF444430',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          marginBottom: '16px',
+        }}>
+          <p style={{ fontSize: '11px', color: '#F87171', fontFamily: 'var(--font-mono)', margin: 0 }}>
+            {getEventIcon(latestViolation.eventType)} {formatEventType(latestViolation.eventType)}
+            {latestViolation.pastedText && ` — "${latestViolation.pastedText.substring(0, 60)}..."`}
+          </p>
+        </div>
+      )}
+
+      <p style={{
+        fontSize: '14px',
+        color: 'var(--text)',
+        lineHeight: '1.7',
+        marginBottom: '24px',
+        fontFamily: 'var(--font-body)',
+      }}>
+        The candidate has committed a <strong style={{ color: '#EF4444' }}>second violation</strong>.
+        A warning was already sent after the first.
+        Do you want to <strong style={{ color: 'white' }}>terminate this interview</strong> immediately?
+      </p>
+
+      {/* Buttons */}
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <button
+          onClick={handleEndForCheating}
+          style={{
+            flex: 1, padding: '12px',
+            borderRadius: '10px',
+            background: '#EF4444',
+            color: 'white', border: 'none',
+            fontWeight: '700', fontSize: '14px',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-body)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = '#DC2626'}
+          onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}
+        >
+          Yes, End Interview
+        </button>
+        <button
+          onClick={() => { setShowEndPopup(false); setViolationCount(1) }}
+          style={{
+            flex: 1, padding: '12px',
+            borderRadius: '10px',
+            background: 'transparent',
+            color: 'var(--text-dim)',
+            border: '1px solid var(--border)',
+            fontWeight: '600', fontSize: '14px',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-body)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}
+        >
+          No, Continue
+        </button>
+      </div>
+
+      <p style={{
+        textAlign: 'center', marginTop: '14px',
+        fontSize: '11px', color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        Choosing "No" will reset to 1 warning. Next violation will prompt again.
+      </p>
+    </div>
+  </div>
+)}
 
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 32px', height: '64px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
