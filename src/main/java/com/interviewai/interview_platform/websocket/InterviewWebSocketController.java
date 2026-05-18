@@ -252,4 +252,21 @@ public class InterviewWebSocketController {
 
         log.info("Proctoring event broadcast to /topic/proctoring");
     }
+
+    @MessageMapping("/warning")
+    public void handleWarning(@org.springframework.messaging.handler.annotation.Payload Map<String, Object> payload) {
+        String sessionId = payload.get("sessionId").toString();
+        String action = payload.get("action").toString();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("action", action);
+        response.put("sessionId", sessionId);
+
+        messagingTemplate.convertAndSend(
+                "/topic/warning/" + sessionId,
+                response
+        );
+
+        log.info("Warning sent to session: {} — action: {}", sessionId, action);
+    }
 }
