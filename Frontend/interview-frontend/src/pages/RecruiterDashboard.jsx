@@ -15,6 +15,8 @@ const pctColor = (pct) =>
   pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
 
 export default function RecruiterDashboard() {
+  const [sessionSearch, setSessionSearch] = useState('')
+const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const { user, logout } = useAuth()
 
   const [candidates, setCandidates] = useState([])
@@ -38,7 +40,11 @@ export default function RecruiterDashboard() {
   const [isPaused, setIsPaused] = useState(false)
   const [isStopped, setIsStopped] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
-  const [activeTab, setActiveTab] = useState('live')
+  const [activeTab, setActiveTab] = useState(() => {
+  // Always start on live tab — never restore from storage
+  sessionStorage.removeItem('activeTab')
+  return 'live'
+})
   const [proctoringAlerts, setProctoringAlerts] = useState([])
 
   const [rsCandidate, setRsCandidate] = useState(null)
@@ -51,14 +57,25 @@ export default function RecruiterDashboard() {
   const stompClient = useRef(null)
   const pollingStoppedRef = useRef(false)
 
-  useEffect(() => {
-    api.get('/users/all')
-      .then((res) => {
-        setCandidates(res.data.filter((u) => u.role === 'USER'))
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
+useEffect(() => {
+  api.get('/users/all')
+    .then((res) => {
+      const filtered = res.data.filter((u) => u.role === 'USER')
+      setCandidates(filtered)
+      setLoading(false)
+
+      // ✅ Restore selected candidate from sessionStorage
+      const saved = sessionStorage.getItem('recruiter_selected_candidate')
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          const found = filtered.find(c => c.id === parsed.id)
+          if (found) setSelectedCandidate(found)
+        } catch {}
+      }
+    })
+    .catch(() => setLoading(false))
+}, [])
 
   useEffect(() => {
     fetchCompletedSessions()
@@ -68,10 +85,11 @@ export default function RecruiterDashboard() {
     if (pollingStoppedRef.current) return
     api.get('/interview/all-sessions')
       .then((res) => {
-        const completed = (res.data || [])
-          .filter(s => s.status === 'COMPLETED')
-          .sort((a, b) => b.id - a.id)
-        setCompletedSessions(completed)
+const completed = (res.data || [])
+  .filter(s => s.status === 'COMPLETED')
+  .sort((a, b) => b.id - a.id)
+setAllCompletedSessions(completed)
+setCompletedSessions(completed.slice(0, 10))
       })
       .catch((err) => {
         if (err?.response?.status === 403) {
@@ -81,7 +99,6 @@ export default function RecruiterDashboard() {
       })
   }
 
-  // ─── Load analysis for a session ──────────────────────────────────────────
   const loadAnalysisForSession = async (sessionId) => {
     if (!sessionId) return
 
@@ -93,29 +110,24 @@ export default function RecruiterDashboard() {
     setAnalysisLoading(true)
     setReportSessionId(sessionId)
 
-    // 1. Try localStorage first
     const stored = localStorage.getItem(`interview_analysis_${sessionId}`)
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
-
-        // Split into DB questions and recruiter questions
-        const allParsed = parsed.filter(
-          q => q.userAnswer && q.userAnswer.trim() !== ''
-        ).map(q => ({
-          ...q,
-          isRecruiterQuestion: Number(q.questionNumber) === 999
-        }))
-
+        const allParsed = parsed
+          .filter(q => q.userAnswer && q.userAnswer.trim() !== '')
+          .map(q => ({
+            ...q,
+            isRecruiterQuestion: Number(q.questionNumber) === 999
+          }))
         setAnalysisQuestions(prev => ({ ...prev, [sessionId]: allParsed }))
         setAnalysisLoading(false)
         return
       } catch {
-        // bad JSON — fall through to backend
+        // fall through to backend
       }
     }
 
-    // 2. Fallback — fetch from backend
     try {
       const res = await api.get(`/interview/${sessionId}/questions`)
       const allParsed = (res.data || [])
@@ -153,7 +165,6 @@ export default function RecruiterDashboard() {
     }
   }, [activeTab, completedSessions])
 
-  // ─── WebSocket for live feed ───────────────────────────────────────────────
   useEffect(() => {
     if (!activeSessionId) return
     setWsConnected(false)
@@ -213,7 +224,6 @@ export default function RecruiterDashboard() {
     return () => { client.deactivate(); setWsConnected(false) }
   }, [activeSessionId])
 
-  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleStart = () => {
     if (!selectedCandidate) {
       setMessage('Select a candidate first')
@@ -284,7 +294,6 @@ export default function RecruiterDashboard() {
             .filter(s => s.status === 'COMPLETED')
             .sort((a, b) => b.id - a.id)
           setCompletedSessions(completed)
-
           setAnalysisQuestions(prev => {
             const updated = { ...prev }
             delete updated[endedSessionId]
@@ -313,7 +322,6 @@ export default function RecruiterDashboard() {
     setRecruiterQuestion('')
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
   const getEventIcon = (t) => ({
     PASTE_DETECTED: '📋',
     RIGHT_CLICK: '🖱️',
@@ -363,7 +371,6 @@ export default function RecruiterDashboard() {
     )
   }
 
-  // ─── Analysis Reports Tab render ──────────────────────────────────────────
   const renderReportsTab = () => {
     if (completedSessions.length === 0) {
       return (
@@ -379,19 +386,19 @@ export default function RecruiterDashboard() {
 
     if (!currentSession) return null
 
-    // Split all questions into DB questions and recruiter questions
+    // ALL questions — AI and recruiter together, no distinction
     const allQ = analysisQuestions[currentSession.id] || []
-    const questions = allQ.filter(q => !q.isRecruiterQuestion)
-    const recruiterQuestions = allQ.filter(q => q.isRecruiterQuestion)
 
-    // Candidate name with fallbacks
+    // Only AI questions used for score calculation
+    const aiQ = allQ.filter(q => !q.isRecruiterQuestion)
+
     const candidate = candidates.find(c => c.id === currentSession.user?.id)
     const candidateName = candidate?.fullName || currentSession.user?.fullName || currentSession.user?.email || 'Unknown'
 
-    const hasGroqAnalysis = questions.some(q => q.confidence != null)
+    const hasGroqAnalysis = aiQ.some(q => q.confidence != null)
 
     const avgOf = (key) => {
-      const withData = questions.filter(q => q[key] != null)
+      const withData = aiQ.filter(q => q[key] != null)
       if (withData.length === 0) return null
       return Math.round(withData.reduce((s, q) => s + q[key], 0) / withData.length)
     }
@@ -399,38 +406,142 @@ export default function RecruiterDashboard() {
     const avgConfidence = avgOf('confidence')
     const avgAuthenticity = avgOf('authenticity')
     const avgAccuracy = avgOf('accuracy')
-    const suspiciousCount = questions.filter(q => q.suspicious).length
-    const totalScore = questions.reduce((s, q) => s + (q.score || 0), 0)
-    const maxScore = questions.length * 10
+    const suspiciousCount = aiQ.filter(q => q.suspicious).length
+    const totalScore = aiQ.reduce((s, q) => s + (q.score || 0), 0)
+    const maxScore = aiQ.length * 10
     const scorePct = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-        {/* Session selector */}
-        {completedSessions.length > 1 && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {completedSessions.map(s => {
-              const c = candidates.find(x => x.id === s.user?.id)
-              const cName = c?.fullName || s.user?.fullName || s.user?.email || `User #${s.user?.id}`
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => loadAnalysisForSession(s.id)}
-                  style={{
-                    padding: '6px 14px', borderRadius: '8px', fontSize: '12px',
-                    fontFamily: 'var(--font-mono)', cursor: 'pointer',
-                    border: `1px solid ${s.id === currentSession.id ? '#2563EB' : 'var(--border)'}`,
-                    background: s.id === currentSession.id ? '#2563EB15' : 'var(--surface2)',
-                    color: s.id === currentSession.id ? '#60A5FA' : 'var(--text-dim)',
-                  }}
-                >
-                  #{s.id} {cName}
-                </button>
-              )
-            })}
-          </div>
-        )}
+      {/* Search by candidate name */}
+{completedSessions.length > 0 && (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+    {/* Search input */}
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        placeholder="Search by candidate name or session ID..."
+        value={sessionSearch}
+        onChange={e => setSessionSearch(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '10px 14px 10px 36px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          background: 'var(--surface2)',
+          color: 'var(--text)',
+          fontSize: '13px',
+          fontFamily: 'var(--font-mono)',
+          outline: 'none',
+          boxSizing: 'border-box',
+          transition: 'border-color 0.2s',
+        }}
+        onFocus={e => e.target.style.borderColor = '#2563EB'}
+        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+      />
+      {/* Search icon */}
+      <span style={{
+        position: 'absolute', left: '11px', top: '50%',
+        transform: 'translateY(-50%)',
+        fontSize: '14px', color: 'var(--text-dim)', pointerEvents: 'none',
+      }}>🔍</span>
+      {/* Clear button */}
+      {sessionSearch && (
+        <button
+          onClick={() => setSessionSearch('')}
+          style={{
+            position: 'absolute', right: '10px', top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none', border: 'none',
+            color: 'var(--text-dim)', cursor: 'pointer',
+            fontSize: '14px', padding: '0',
+          }}
+        >✕</button>
+      )}
+    </div>
+
+    {/* Filtered results */}
+    {sessionSearch.trim() !== '' && (
+      <div style={{
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        overflow: 'hidden',
+        maxHeight: '220px',
+        overflowY: 'auto',
+      }}>
+        {(() => {
+          const q = sessionSearch.toLowerCase().trim()
+          const filtered = allCompletedSessions.filter(s => {
+            const c = candidates.find(x => x.id === s.user?.id)
+            const name = (c?.fullName || s.user?.fullName || s.user?.email || '').toLowerCase()
+            return name.includes(q) || String(s.id).includes(q)
+          })
+          if (filtered.length === 0) return (
+            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
+              No sessions found for "{sessionSearch}"
+            </div>
+          )
+          return filtered.map((s, idx) => {
+            const c = candidates.find(x => x.id === s.user?.id)
+            const cName = c?.fullName || s.user?.fullName || s.user?.email || `User #${s.user?.id}`
+            const isSelected = s.id === currentSession?.id
+            return (
+              <div
+                key={s.id}
+                onClick={() => { loadAnalysisForSession(s.id); setSessionSearch('') }}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 14px',
+                  borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none',
+                  background: isSelected ? '#2563EB10' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface3)' }}
+                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{
+                    fontSize: '10px', fontFamily: 'var(--font-mono)',
+                    background: isSelected ? '#2563EB30' : 'var(--surface)',
+                    color: isSelected ? '#60A5FA' : 'var(--text-dim)',
+                    padding: '2px 7px', borderRadius: '5px',
+                  }}>#{s.id}</span>
+                  <span style={{ fontSize: '13px', color: isSelected ? '#60A5FA' : 'var(--text)', fontWeight: isSelected ? '600' : '400' }}>
+                    {cName}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {s.jobRole?.replace(/_/g, ' ')}
+                  </span>
+                  <span style={{
+                    fontSize: '10px', fontFamily: 'var(--font-mono)',
+                    color: s.totalScore > 0 ? '#10B981' : 'var(--text-dim)',
+                  }}>
+                    {s.totalQuestions > 0 ? `${Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)}%` : '—'}
+                  </span>
+                </div>
+              </div>
+            )
+          })
+        })()}
+      </div>
+    )}
+
+    {/* Current session label */}
+    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+      Showing session #{currentSession?.id} —{' '}
+      <span style={{ color: 'var(--text-dim)' }}>
+        search above to find any session from all {allCompletedSessions.length} completed interviews
+      </span>
+    </div>
+
+  </div>
+)}
 
         {/* Header */}
         <div>
@@ -441,8 +552,7 @@ export default function RecruiterDashboard() {
             {candidateName}
           </h2>
           <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>
-            {currentSession.jobRole?.replace(/_/g, ' ')} • Session #{currentSession.id} • {questions.length} answered
-            {recruiterQuestions.length > 0 && ` • ${recruiterQuestions.length} interviewer Q`}
+            {currentSession.jobRole?.replace(/_/g, ' ')} • Session #{currentSession.id} • {allQ.length} total questions
           </p>
         </div>
 
@@ -450,7 +560,7 @@ export default function RecruiterDashboard() {
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
             Loading analysis...
           </div>
-        ) : questions.length === 0 && recruiterQuestions.length === 0 ? (
+        ) : allQ.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
             No answered questions found for this session.
           </div>
@@ -460,7 +570,7 @@ export default function RecruiterDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
               <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Questions</div>
-                <div style={{ fontSize: '28px', fontWeight: '800', color: '#60A5FA' }}>{questions.length}</div>
+                <div style={{ fontSize: '28px', fontWeight: '800', color: '#60A5FA' }}>{allQ.length}</div>
               </div>
               <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Score</div>
@@ -488,9 +598,9 @@ export default function RecruiterDashboard() {
               )}
             </div>
 
-            {/* Per question cards — DB questions only */}
+            {/* All questions — AI and recruiter mixed, no distinction shown */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {questions.map((q, idx) => (
+              {allQ.map((q, idx) => (
                 <div key={idx} className="card" style={{
                   padding: '20px',
                   borderLeft: q.suspicious ? '4px solid #EF4444' : '4px solid #10B981',
@@ -513,7 +623,7 @@ export default function RecruiterDashboard() {
                     </div>
                   </div>
 
-                  <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #8B5CF6' }}>
+                  <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #2563EB' }}>
                     {q.questionText}
                   </p>
 
@@ -565,62 +675,12 @@ export default function RecruiterDashboard() {
                 </div>
               ))}
             </div>
-
-            {/* Recruiter questions section */}
-            {recruiterQuestions.length > 0 && (
-              <div style={{ marginTop: '8px' }}>
-                <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>
-                  Interviewer Questions
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {recruiterQuestions.map((q, idx) => (
-                    <div key={idx} className="card" style={{ padding: '20px', borderLeft: '4px solid #8B5CF6' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: '#8B5CF6', background: '#8B5CF620', padding: '3px 10px', borderRadius: '6px' }}>
-                          Interviewer Q{idx + 1}
-                        </span>
-                        {q.score != null && (
-                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(q.score * 10), background: `${pctColor(q.score * 10)}15`, padding: '3px 10px', borderRadius: '6px' }}>
-                            Score {q.score}/10
-                          </span>
-                        )}
-                      </div>
-
-                      <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #8B5CF6' }}>
-                        {q.questionText}
-                      </p>
-
-                      <div style={{ background: 'var(--surface2)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
-                        <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                          Candidate Answer
-                        </p>
-                        <p style={{ fontSize: '13px', color: 'var(--text)', margin: 0, lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-                          {q.userAnswer}
-                        </p>
-                      </div>
-
-                      {q.aiFeedback && (
-                        <div style={{ background: '#1e293b', borderRadius: '8px', padding: '10px 14px' }}>
-                          <p style={{ fontSize: '10px', color: '#818cf8', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                            AI Feedback
-                          </p>
-                          <p style={{ fontSize: '13px', color: '#cbd5e1', margin: 0, lineHeight: '1.6' }}>
-                            {q.aiFeedback}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
     )
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', fontFamily: 'var(--font-body)' }}>
 
@@ -674,71 +734,78 @@ export default function RecruiterDashboard() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-              {/* Candidate selector */}
-              <div className="card" style={{ padding: '24px' }}>
-                <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>01 — Select Candidate</p>
-                {loading ? (
-                  <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Loading candidates...</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {candidates.map((c) => (
-                      <div
-                        key={c.id}
-                        onClick={() => setSelectedCandidate(c)}
-                        onMouseEnter={() => setHoveredCandidate(c.id)}
-                        onMouseLeave={() => setHoveredCandidate(null)}
-                        style={{
-                          padding: '14px 16px', borderRadius: 'var(--radius)',
-                          border: `1px solid ${selectedCandidate?.id === c.id ? '#2563EB60' : hoveredCandidate === c.id ? 'var(--border-bright)' : 'var(--border)'}`,
-                          borderLeft: selectedCandidate?.id === c.id ? '3px solid #2563EB' : undefined,
-                          background: selectedCandidate?.id === c.id ? '#2563EB10' : 'var(--surface2)',
-                          cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
-                          alignItems: 'center', transition: 'all 0.2s ease',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #2563EB, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', color: 'white' }}>
-                            {c.fullName?.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p style={{ fontWeight: '600', fontSize: '14px' }}>{c.fullName}</p>
-                            <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{c.email}</p>
-                          </div>
-                        </div>
-                        {selectedCandidate?.id === c.id && (
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }} />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+<div className="card" style={{ padding: '24px' }}>
+  <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>
+    01 — Select Candidate
+  </p>
+  {loading ? (
+    <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Loading candidates...</p>
+  ) : (
+    <div style={{ position: 'relative' }}>
+      <select
+        value={selectedCandidate?.id || ''}
+        onChange={(e) => {
+          const found = candidates.find(c => String(c.id) === e.target.value)
+          setSelectedCandidate(found || null)
+          if (found) {
+            sessionStorage.setItem('recruiter_selected_candidate', JSON.stringify(found))
+          } else {
+            sessionStorage.removeItem('recruiter_selected_candidate')
+          }
+        }}
+        style={{
+          width: '100%',
+          padding: '12px 40px 12px 14px',
+          borderRadius: 'var(--radius)',
+          border: `1px solid ${selectedCandidate ? '#2563EB60' : 'var(--border)'}`,
+          background: 'var(--surface2)',
+          color: selectedCandidate ? 'var(--text)' : 'var(--text-dim)',
+          fontSize: '14px',
+          fontFamily: 'var(--font-body)',
+          outline: 'none',
+          cursor: 'pointer',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+        }}
+      >
+        <option value="">— Select a candidate —</option>
+        {candidates.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.fullName} ({c.email})
+          </option>
+        ))}
+      </select>
+      {/* Arrow icon */}
+      <div style={{
+        position: 'absolute', right: '12px', top: '50%',
+        transform: 'translateY(-50%)', pointerEvents: 'none',
+        color: 'var(--text-dim)',
+      }}>
+        ▾
+      </div>
+    </div>
+  )}
+</div>
 
-              {/* Role selector */}
               <div className="card" style={{ padding: '24px' }}>
                 <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>02 — Job Role</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {JOB_ROLES.map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => setSelectedRole(r)}
-                      style={{
-                        padding: '12px 16px', borderRadius: 'var(--radius)',
-                        border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`,
-                        background: selectedRole === r ? '#2563EB10' : 'var(--surface2)',
-                        color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)',
-                        fontWeight: selectedRole === r ? '600' : '400',
-                        fontSize: '14px', textAlign: 'left',
-                        transition: 'all 0.2s ease', cursor: 'pointer',
-                      }}
-                    >
+                    <button key={r} onClick={() => setSelectedRole(r)} style={{
+                      padding: '12px 16px', borderRadius: 'var(--radius)',
+                      border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`,
+                      background: selectedRole === r ? '#2563EB10' : 'var(--surface2)',
+                      color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)',
+                      fontWeight: selectedRole === r ? '600' : '400',
+                      fontSize: '14px', textAlign: 'left',
+                      transition: 'all 0.2s ease', cursor: 'pointer',
+                    }}>
                       {r.replace(/_/g, ' ')}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Launch */}
               <div className="card" style={{ padding: '24px' }}>
                 <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>03 — Launch</p>
                 {selectedCandidate && (
@@ -761,7 +828,6 @@ export default function RecruiterDashboard() {
                 )}
               </div>
 
-              {/* Proctoring alerts */}
               {proctoringAlerts.length > 0 && (
                 <div className="card" style={{ padding: '24px', background: '#1a0a0a', borderColor: '#7F1D1D' }}>
                   <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#EF4444', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>
@@ -821,15 +887,12 @@ export default function RecruiterDashboard() {
                         {isPaused ? 'Resume' : 'Pause'}
                       </button>
                       {!isStopped ? (
-                        <button
-                          onClick={handleStop}
-                          style={{
-                            padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
-                            cursor: 'pointer', border: '1px solid #EF444460',
-                            background: '#EF444415', color: '#EF4444',
-                            transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)',
-                          }}
-                        >
+                        <button onClick={handleStop} style={{
+                          padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
+                          cursor: 'pointer', border: '1px solid #EF444460',
+                          background: '#EF444415', color: '#EF4444',
+                          transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)',
+                        }}>
                           End Interview
                         </button>
                       ) : (
@@ -862,13 +925,13 @@ export default function RecruiterDashboard() {
                 {!activeSessionId ? (
                   <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', opacity: 0.4 }}>
-  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B">
-    <rect x="2" y="3" width="20" height="14" rx="2"/>
-    <path d="M8 21h8M12 17v4"/>
-  </svg>
-  <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
-  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
-</div>
+                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B">
+                        <rect x="2" y="3" width="20" height="14" rx="2"/>
+                        <path d="M8 21h8M12 17v4"/>
+                      </svg>
+                      <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
+                    </div>
                   </div>
                 ) : Object.keys(liveFeed).length === 0 ? (
                   <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -953,10 +1016,8 @@ export default function RecruiterDashboard() {
           </div>
         )}
 
-        {/* ANALYSIS REPORTS TAB */}
         {activeTab === 'reports' && renderReportsTab()}
 
-        {/* RESUME SCREENING TAB */}
         {activeTab === 'resume' && (
           <ResumeScreeningTab
             candidates={candidates}

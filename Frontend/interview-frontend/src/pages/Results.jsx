@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import API from "../services/api";
 
-// Cleans markdown symbols from Groq AI feedback
 function cleanMarkdown(text) {
   if (!text) return text;
   return text
@@ -16,7 +15,6 @@ function cleanMarkdown(text) {
 
 export default function Results() {
   const { sessionId } = useParams();
-  const navigate = useNavigate();
   const [allQuestions, setAllQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
@@ -25,16 +23,10 @@ export default function Results() {
     fetchResults();
   }, [sessionId]);
 
-const fetchResults = async (attempt = 1) => {
+  const fetchResults = async (attempt = 1) => {
     try {
       const res = await API.get(`/interview/${sessionId}/questions`);
       const data = res.data || [];
-      console.log('ALL QUESTIONS:', JSON.stringify(data.map(q => ({
-        id: q.id,
-        qn: q.questionNumber,
-        hasAnswer: !!q.userAnswer,
-        text: q.questiontext?.substring(0, 30)
-      }))));
       setAllQuestions(data);
       setLoading(false);
 
@@ -52,36 +44,23 @@ const fetchResults = async (attempt = 1) => {
     }
   };
 
-  // Only show questions that:
-  // 1. Have a real answer
-  // 2. Are NOT recruiter questions (questionNumber 999)
-const answeredQuestions = allQuestions.filter(
-  q => q.userAnswer
-    && q.userAnswer.trim() !== ""
-    && Number(q.questionNumber) !== 999
-);
+  // All answered questions — both AI and recruiter (999)
+  // shown together, no distinction visible to candidate
+  const answeredQuestions = allQuestions.filter(
+    q => q.userAnswer && q.userAnswer.trim() !== ""
+  );
 
-  // Recruiter questions answered separately — not counted in score
-const recruiterAnswered = allQuestions.filter(
-  q => q.userAnswer
-    && q.userAnswer.trim() !== ""
-    && Number(q.questionNumber) === 999
-);
+  const aiAnswered = answeredQuestions.filter(
+    q => Number(q.questionNumber) !== 999
+  );
 
-  // Unanswered = questions that were asked (have questiontext)
-  // but have no answer and are not Q999
-  const askedButUnanswered = [];
-
-  const totalScore = answeredQuestions.reduce(
+  const totalScore = aiAnswered.reduce(
     (sum, q) => sum + (q.score || 0), 0
   );
-  const maxScore = answeredQuestions.length * 10;
+  const maxScore = aiAnswered.length * 10;
   const percentage = maxScore > 0
     ? Math.round((totalScore / maxScore) * 100)
     : 0;
-  const strongAnswers = answeredQuestions.filter(
-    q => (q.score || 0) >= 7
-  ).length;
 
   const getScoreColor = (score) => {
     if (!score && score !== 0) return "#64748b";
@@ -108,14 +87,12 @@ const recruiterAnswered = allQuestions.filter(
   return (
     <div style={styles.container}>
 
+      {/* HEADER — no subtitle line */}
       <div style={styles.header}>
         <h1 style={styles.title}>Interview Results</h1>
-        <p style={styles.subtitle}>
-          {answeredQuestions.length} Answered
-          {recruiterAnswered.length > 0 && ` • ${recruiterAnswered.length} Interviewer Q`}
-        </p>
       </div>
 
+      {/* SCORE CARD — no points line, no strong answers line */}
       <div style={styles.scoreCard}>
         <div style={styles.scoreCircle}>
           <span style={{ ...styles.scoreNumber, color }}>
@@ -127,12 +104,6 @@ const recruiterAnswered = allQuestions.filter(
           <div style={{ ...styles.gradeBadge, background: color }}>
             {grade}
           </div>
-          <p style={styles.scoreText}>
-            {totalScore} / {maxScore} points
-          </p>
-          <p style={styles.scoreText}>
-            {strongAnswers} strong answer{strongAnswers !== 1 ? 's' : ''}
-          </p>
         </div>
       </div>
 
@@ -150,6 +121,7 @@ const recruiterAnswered = allQuestions.filter(
         </div>
       )}
 
+      {/* ALL QUESTIONS — AI and recruiter mixed together, no distinction */}
       <div style={styles.questionsList}>
         {answeredQuestions.map((q, index) => {
           const questionText = q.questiontext || q.questionText || "Unknown";
@@ -161,6 +133,7 @@ const recruiterAnswered = allQuestions.filter(
             <div key={q.id} style={styles.questionCard}>
 
               <div style={styles.questionHeader}>
+                {/* All questions shown as Q1, Q2, Q3 — no distinction */}
                 <span style={styles.questionNumber}>Q{index + 1}</span>
                 <div style={{
                   ...styles.scoreTag,
@@ -199,71 +172,7 @@ const recruiterAnswered = allQuestions.filter(
         })}
       </div>
 
-      {askedButUnanswered.length > 0 && (
-        <div style={{
-          textAlign: 'center', padding: '16px',
-          background: '#F9731610', border: '1px solid #F9731640',
-          borderRadius: '12px', marginTop: '20px'
-        }}>
-          <p style={{
-            fontSize: '13px', color: '#F97316',
-            fontFamily: 'monospace', margin: 0
-          }}>
-            {askedButUnanswered.length} question(s) were not answered
-            and are not shown in results.
-          </p>
-        </div>
-      )}
-       {recruiterAnswered.length > 0 && (
-        <div style={{ marginTop: '20px' }}>
-          <h3 style={{ color: '#8B5CF6', fontSize: '1rem', fontFamily: 'monospace', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Interviewer Questions
-          </h3>
-          {recruiterAnswered.map((q, index) => {
-            const questionText = q.questiontext || q.questionText || 'Unknown'
-            const aiFeedback = cleanMarkdown(q.aiFeedback) || null
-            return (
-              <div key={q.id} style={{ ...styles.questionCard, borderLeft: '4px solid #8B5CF6', marginBottom: '12px' }}>
-                <div style={styles.questionHeader}>
-                  <span style={{ ...styles.questionNumber, background: '#8B5CF620', color: '#8B5CF6' }}>
-                    Interviewer Q{index + 1}
-                  </span>
-                  {q.score != null && (
-                    <div style={{ ...styles.scoreTag, background: '#8B5CF6' }}>
-                      {q.score} / 10
-                    </div>
-                  )}
-                </div>
-                <p style={styles.questionText}>{questionText}</p>
-                <div style={styles.section}>
-                  <span style={styles.sectionLabel}>Your Answer</span>
-                  <p style={styles.answerText}>{q.userAnswer}</p>
-                </div>
-                {aiFeedback && (
-                  <div style={{ ...styles.section, background: '#1e293b' }}>
-                    <span style={{ ...styles.sectionLabel, color: '#818cf8' }}>AI Feedback</span>
-                    <p style={{ ...styles.answerText, color: '#cbd5e1' }}>{aiFeedback}</p>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      <div style={styles.buttons}>
-        <button
-          style={styles.btnPrimary}
-          onClick={() => navigate("/waiting")}
-        >
-          Start New Interview
-        </button>
-        <button
-          style={styles.btnSecondary}
-          onClick={() => navigate("/dashboard")}
-        >
-          Back to Dashboard
-        </button>
-      </div>
+      {/* No buttons — removed Start New Interview and Back to Dashboard */}
 
     </div>
   );
@@ -295,10 +204,6 @@ const styles = {
     fontWeight: "700",
     color: "#f1f5f9",
     margin: 0,
-  },
-  subtitle: {
-    color: "#94a3b8",
-    marginTop: "0.5rem",
   },
   scoreCard: {
     background: "#1e293b",
@@ -340,11 +245,6 @@ const styles = {
     fontWeight: "600",
     fontSize: "0.875rem",
     width: "fit-content",
-  },
-  scoreText: {
-    color: "#94a3b8",
-    margin: 0,
-    fontSize: "0.9rem",
   },
   questionsList: {
     display: "flex",
@@ -405,31 +305,5 @@ const styles = {
     lineHeight: 1.6,
     fontSize: "0.9rem",
     whiteSpace: "pre-wrap",
-  },
-  buttons: {
-    display: "flex",
-    gap: "1rem",
-    marginTop: "2rem",
-    justifyContent: "center",
-  },
-  btnPrimary: {
-    background: "#6366f1",
-    color: "white",
-    border: "none",
-    padding: "0.75rem 1.5rem",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "600",
-    fontSize: "1rem",
-  },
-  btnSecondary: {
-    background: "#334155",
-    color: "#f1f5f9",
-    border: "none",
-    padding: "0.75rem 1.5rem",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "600",
-    fontSize: "1rem",
   },
 };
