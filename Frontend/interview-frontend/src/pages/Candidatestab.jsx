@@ -1,5 +1,24 @@
-// Line 
 import { useMemo, useEffect, useState } from 'react'
+
+const API_URL = import.meta.env.VITE_API_URL
+
+function getToken() {
+  return sessionStorage.getItem('token')
+}
+
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+      ...(options.headers || {}),
+    },
+  })
+  if (res.status === 204) return null
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
 
 const pctColor = (pct) =>
   pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
@@ -43,35 +62,61 @@ const getAiRemark = (sessionId) => {
 
 export default function CandidatesTab({ candidates, sessions = [], loading = false }) {
   const [openId, setOpenId] = useState(null)
-  const [recruiterRemarks, setRecruiterRemarks] = useState({})
-  const [recruiterScores, setRecruiterScores] = useState({})
+  // Map of sessionId -> { recruiterScore, remark, status } — sourced from DB
+  const [dbRemarks, setDbRemarks] = useState({})
   const [editingRemark, setEditingRemark] = useState(null)
   const [remarkDraft, setRemarkDraft] = useState('')
   const [scoreDraft, setScoreDraft] = useState('')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('ALL')
+  const [savingId, setSavingId] = useState(null)
 
-  // Load recruiter remarks & scores from localStorage on mount
+  // Load all recruiter remarks from DB on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('recruiter_remarks')
-      if (saved) setRecruiterRemarks(JSON.parse(saved))
-    } catch {}
-    try {
-      const savedScores = localStorage.getItem('recruiter_scores')
-      if (savedScores) setRecruiterScores(JSON.parse(savedScores))
-    } catch {}
+    apiFetch('/recruiter/remarks/all')
+      .then((data) => {
+        if (!data) return
+        const map = {}
+        data.forEach((r) => {
+          map[r.sessionId] = {
+            recruiterScore: r.recruiterScore ?? null,
+            remark: r.remark ?? '',
+            status: r.status ?? 'PENDING',
+          }
+        })
+        setDbRemarks(map)
+      })
+      .catch(console.error)
   }, [])
 
-  const saveRemark = (sessionId, text, score) => {
-    const updatedRemarks = { ...recruiterRemarks, [sessionId]: text }
-    setRecruiterRemarks(updatedRemarks)
-    localStorage.setItem('recruiter_remarks', JSON.stringify(updatedRemarks))
-    const parsed = parseInt(score)
-    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-      const updatedScores = { ...recruiterScores, [sessionId]: parsed }
-      setRecruiterScores(updatedScores)
-      localStorage.setItem('recruiter_scores', JSON.stringify(updatedScores))
+  const saveRemark = async (sessionId, text, score) => {
+    const parsed = score !== '' ? parseInt(score) : null
+    const scoreToSave = !isNaN(parsed) && parsed != null && parsed >= 0 && parsed <= 100 ? parsed : null
+
+    setSavingId(sessionId)
+    try {
+      const saved = await apiFetch('/recruiter/remark', {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId,
+          recruiterScore: scoreToSave,
+          remark: text || null,
+          status: statusInfo(scoreToSave).label,
+        }),
+      })
+      setDbRemarks((prev) => ({
+        ...prev,
+        [sessionId]: {
+          recruiterScore: saved.recruiterScore ?? null,
+          remark: saved.remark ?? '',
+          status: saved.status ?? 'PENDING',
+        },
+      }))
+    } catch (e) {
+      console.error('Failed to save remark:', e)
+      alert('Failed to save. Please try again.')
+    } finally {
+      setSavingId(null)
     }
     setEditingRemark(null)
     setScoreDraft('')
@@ -90,9 +135,8 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return rows.filter(r => {
-      const recScore = recruiterScores[r.session.id]
-      // Status based on recruiter score only
-      const status = statusInfo(recScore ?? null)
+      const recScore = dbRemarks[r.session.id]?.recruiterScore ?? null
+      const status = statusInfo(recScore)
       const matchSearch =
         !q ||
         r.name.toLowerCase().includes(q) ||
@@ -101,20 +145,17 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
       const matchStatus = filterStatus === 'ALL' || status.label === filterStatus
       return matchSearch && matchStatus
     })
-  }, [rows, search, filterStatus, recruiterScores])
+  }, [rows, search, filterStatus, dbRemarks])
 
   const statusCounts = useMemo(() => {
     const count = { ALL: rows.length, SELECTED: 0, 'ON HOLD': 0, 'NOT SELECTED': 0, PENDING: 0 }
     rows.forEach(r => {
-      const recScore = recruiterScores[r.session.id]
-      const label = statusInfo(recScore ?? null).label
+      const recScore = dbRemarks[r.session.id]?.recruiterScore ?? null
+      const label = statusInfo(recScore).label
       count[label] = (count[label] || 0) + 1
     })
     return count
-  }, [rows, recruiterScores])
-
-  // Need useState for openId, editingRemark etc.
-  // Added at top: import { useMemo, useEffect, useState } from 'react'
+  }, [rows, dbRemarks])
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '80px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
@@ -210,10 +251,12 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filtered.map(({ session, name, aiScorePct, aiRemark }) => {
             const isOpen = openId === session.id
-            const recruiterRemark = recruiterRemarks[session.id] || ''
-            const recruiterScore = recruiterScores[session.id]
+            const dbRemark = dbRemarks[session.id] || {}
+            const recruiterRemark = dbRemark.remark || ''
+            const recruiterScore = dbRemark.recruiterScore ?? null
             // Status based on recruiter score ONLY
-            const status = statusInfo(recruiterScore ?? null)
+            const status = statusInfo(recruiterScore)
+            const isSaving = savingId === session.id
 
             return (
               <div key={session.id} style={{
@@ -464,9 +507,10 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                               style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
                             >Cancel</button>
                             <button
+                              disabled={isSaving}
                               onClick={e => { e.stopPropagation(); saveRemark(session.id, remarkDraft, scoreDraft) }}
-                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: '#2563EB', border: 'none', color: 'white', cursor: 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}
-                            >Save</button>
+                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'var(--surface3)' : '#2563EB', border: 'none', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}
+                            >{isSaving ? 'Saving…' : 'Save'}</button>
                           </div>
                         </div>
                       ) : (
