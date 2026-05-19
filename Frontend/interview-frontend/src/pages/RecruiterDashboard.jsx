@@ -4,6 +4,7 @@ import api from '../services/api'
 import SockJS from 'sockjs-client'
 import { Client } from '@stomp/stompjs'
 import ResumeScreeningTab from './ResumeScreeningTab'
+import CandidatesTab from './Candidatestab'
 
 const JOB_ROLES = [
   'JAVA_DEVELOPER',
@@ -16,10 +17,10 @@ const pctColor = (pct) =>
 
 export default function RecruiterDashboard() {
   const [violationCount, setViolationCount] = useState(0)
-const [showEndPopup, setShowEndPopup] = useState(false)
-const [latestViolation, setLatestViolation] = useState(null)
+  const [showEndPopup, setShowEndPopup] = useState(false)
+  const [latestViolation, setLatestViolation] = useState(null)
   const [sessionSearch, setSessionSearch] = useState('')
-const [allCompletedSessions, setAllCompletedSessions] = useState([])
+  const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const { user, logout } = useAuth()
 
   const [candidates, setCandidates] = useState([])
@@ -32,6 +33,7 @@ const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const [reportSessionId, setReportSessionId] = useState(null)
 
   const [loading, setLoading] = useState(true)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
@@ -44,10 +46,9 @@ const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const [isStopped, setIsStopped] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
   const [activeTab, setActiveTab] = useState(() => {
-  // Always start on live tab — never restore from storage
-  sessionStorage.removeItem('activeTab')
-  return 'live'
-})
+    sessionStorage.removeItem('activeTab')
+    return 'live'
+  })
   const [proctoringAlerts, setProctoringAlerts] = useState([])
 
   const [rsCandidate, setRsCandidate] = useState(null)
@@ -60,44 +61,48 @@ const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const stompClient = useRef(null)
   const pollingStoppedRef = useRef(false)
 
-useEffect(() => {
-  api.get('/users/all')
-    .then((res) => {
-      const filtered = res.data.filter((u) => u.role === 'USER')
-      setCandidates(filtered)
-      setLoading(false)
+  // Fetch candidates on mount
+  useEffect(() => {
+    api.get('/users/all')
+      .then((res) => {
+        const filtered = res.data.filter((u) => u.role === 'USER')
+        setCandidates(filtered)
+        setLoading(false)
 
-      // ✅ Restore selected candidate from sessionStorage
-      const saved = sessionStorage.getItem('recruiter_selected_candidate')
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          const found = filtered.find(c => c.id === parsed.id)
-          if (found) setSelectedCandidate(found)
-        } catch {}
-      }
-    })
-    .catch(() => setLoading(false))
-}, [])
+        const saved = sessionStorage.getItem('recruiter_selected_candidate')
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved)
+            const found = filtered.find(c => c.id === parsed.id)
+            if (found) setSelectedCandidate(found)
+          } catch {}
+        }
+      })
+      .catch(() => setLoading(false))
+  }, [])
 
+  // Fetch completed sessions on mount
   useEffect(() => {
     fetchCompletedSessions()
   }, [])
 
   const fetchCompletedSessions = () => {
     if (pollingStoppedRef.current) return
+    setSessionsLoading(true)
     api.get('/interview/all-sessions')
       .then((res) => {
-const completed = (res.data || [])
-  .filter(s => s.status === 'COMPLETED')
-  .sort((a, b) => b.id - a.id)
-setAllCompletedSessions(completed)
-setCompletedSessions(completed.slice(0, 10))
+        const completed = (res.data || [])
+          .filter(s => s.status === 'COMPLETED')
+          .sort((a, b) => b.id - a.id)
+        setAllCompletedSessions(completed)
+        setCompletedSessions(completed.slice(0, 10))
+        setSessionsLoading(false)   // ✅ FIXED: Set loading false on success
       })
       .catch((err) => {
         if (err?.response?.status === 403) {
           pollingStoppedRef.current = true
         }
+        setSessionsLoading(false)
         console.error('Failed to fetch sessions:', err)
       })
   }
@@ -211,29 +216,27 @@ setCompletedSessions(completed.slice(0, 10))
           })
         })
 
-client.subscribe(`/topic/proctoring`, (msg) => {
-  const event = JSON.parse(msg.body)
-  if (String(event.sessionId) === String(activeSessionId)) {
-    setProctoringAlerts((prev) => [event, ...prev].slice(0, 50))
+        client.subscribe(`/topic/proctoring`, (msg) => {
+          const event = JSON.parse(msg.body)
+          if (String(event.sessionId) === String(activeSessionId)) {
+            setProctoringAlerts((prev) => [event, ...prev].slice(0, 50))
 
-    setViolationCount(prev => {
-      const newCount = prev + 1
-      if (newCount === 1) {
-        // First violation — send warning to candidate silently
-        stompClient.current?.publish({
-          destination: '/app/warning',
-          body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }),
+            setViolationCount(prev => {
+              const newCount = prev + 1
+              if (newCount === 1) {
+                stompClient.current?.publish({
+                  destination: '/app/warning',
+                  body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }),
+                })
+              }
+              if (newCount >= 2) {
+                setLatestViolation(event)
+                setShowEndPopup(true)
+              }
+              return newCount
+            })
+          }
         })
-      }
-      if (newCount >= 2) {
-        // Second violation — show end popup to admin
-        setLatestViolation(event)
-        setShowEndPopup(true)
-      }
-      return newCount
-    })
-  }
-})
       },
       onDisconnect: () => setWsConnected(false),
       onStompError: () => setWsConnected(false),
@@ -275,48 +278,37 @@ client.subscribe(`/topic/proctoring`, (msg) => {
       })
   }
 
-const handleEndForCheating = () => {
-  if (!stompClient.current?.connected || !activeSessionId) return
+  const handleEndForCheating = () => {
+    if (!stompClient.current?.connected || !activeSessionId) return
 
-  // Step 1 — send warning END_FOR_CHEATING to candidate screen
-  stompClient.current.publish({
-    destination: '/app/warning',
-    body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }),
-  })
+    stompClient.current.publish({
+      destination: '/app/warning',
+      body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }),
+    })
 
-  // Step 2 — also send STOP to backend so session is marked COMPLETED in DB
-  stompClient.current.publish({
-    destination: '/app/pause',
-    body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }),
-  })
+    stompClient.current.publish({
+      destination: '/app/pause',
+      body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }),
+    })
 
-  setShowEndPopup(false)
-  setViolationCount(0)
-  setIsStopped(true)
-  setIsPaused(true)
-  setMessage('Interview terminated due to repeated violations.')
-  setMessageType('error')
-
-  setTimeout(() => {
-    setActiveSessionId(null)
-    setLiveFeed({})
-    setProctoringAlerts([])
-    setIsPaused(false)
-    setIsStopped(false)
-    setWsConnected(false)
+    setShowEndPopup(false)
     setViolationCount(0)
-    // Refresh completed sessions list
-    api.get('/interview/all-sessions')
-      .then((res) => {
-        const completed = (res.data || [])
-          .filter(s => s.status === 'COMPLETED')
-          .sort((a, b) => b.id - a.id)
-        setAllCompletedSessions(completed)
-        setCompletedSessions(completed.slice(0, 10))
-      })
-      .catch(console.error)
-  }, 2000)
-}
+    setIsStopped(true)
+    setIsPaused(true)
+    setMessage('Interview terminated due to repeated violations.')
+    setMessageType('error')
+
+    setTimeout(() => {
+      setActiveSessionId(null)
+      setLiveFeed({})
+      setProctoringAlerts([])
+      setIsPaused(false)
+      setIsStopped(false)
+      setWsConnected(false)
+      setViolationCount(0)
+      fetchCompletedSessions()
+    }, 2000)
+  }
 
   const handlePauseResume = () => {
     if (!stompClient.current?.connected || !activeSessionId || isStopped) return
@@ -351,20 +343,13 @@ const handleEndForCheating = () => {
       setMessageType('success')
 
       pollingStoppedRef.current = false
-      api.get('/interview/all-sessions')
-        .then((res) => {
-          const completed = (res.data || [])
-            .filter(s => s.status === 'COMPLETED')
-            .sort((a, b) => b.id - a.id)
-          setCompletedSessions(completed)
-          setAnalysisQuestions(prev => {
-            const updated = { ...prev }
-            delete updated[endedSessionId]
-            return updated
-          })
-          setReportSessionId(null)
-        })
-        .catch(console.error)
+      fetchCompletedSessions()
+      setAnalysisQuestions(prev => {
+        const updated = { ...prev }
+        delete updated[endedSessionId]
+        return updated
+      })
+      setReportSessionId(null)
     }, 2000)
   }
 
@@ -449,10 +434,7 @@ const handleEndForCheating = () => {
 
     if (!currentSession) return null
 
-    // ALL questions — AI and recruiter together, no distinction
     const allQ = analysisQuestions[currentSession.id] || []
-
-    // Only AI questions used for score calculation
     const aiQ = allQ.filter(q => !q.isRecruiterQuestion)
 
     const candidate = candidates.find(c => c.id === currentSession.user?.id)
@@ -477,159 +459,92 @@ const handleEndForCheating = () => {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-      {/* Search by candidate name */}
-{completedSessions.length > 0 && (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-    {/* Search input */}
-    <div style={{ position: 'relative' }}>
-      <input
-        type="text"
-        placeholder="Search by candidate name or session ID..."
-        value={sessionSearch}
-        onChange={e => setSessionSearch(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '10px 14px 10px 36px',
-          borderRadius: 'var(--radius)',
-          border: '1px solid var(--border)',
-          background: 'var(--surface2)',
-          color: 'var(--text)',
-          fontSize: '13px',
-          fontFamily: 'var(--font-mono)',
-          outline: 'none',
-          boxSizing: 'border-box',
-          transition: 'border-color 0.2s',
-        }}
-        onFocus={e => e.target.style.borderColor = '#2563EB'}
-        onBlur={e => e.target.style.borderColor = 'var(--border)'}
-      />
-      {/* Search icon */}
-      <span style={{
-        position: 'absolute', left: '11px', top: '50%',
-        transform: 'translateY(-50%)',
-        fontSize: '14px', color: 'var(--text-dim)', pointerEvents: 'none',
-      }}>🔍</span>
-      {/* Clear button */}
-      {sessionSearch && (
-        <button
-          onClick={() => setSessionSearch('')}
-          style={{
-            position: 'absolute', right: '10px', top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'none', border: 'none',
-            color: 'var(--text-dim)', cursor: 'pointer',
-            fontSize: '14px', padding: '0',
-          }}
-        >✕</button>
-      )}
-    </div>
-
-    {/* Filtered results */}
-    {sessionSearch.trim() !== '' && (
-      <div style={{
-        background: 'var(--surface2)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-        overflow: 'hidden',
-        maxHeight: '220px',
-        overflowY: 'auto',
-      }}>
-        {(() => {
-          const q = sessionSearch.toLowerCase().trim()
-          const filtered = allCompletedSessions.filter(s => {
-            const c = candidates.find(x => x.id === s.user?.id)
-            const name = (c?.fullName || s.user?.fullName || s.user?.email || '').toLowerCase()
-            return name.includes(q) || String(s.id).includes(q)
-          })
-          if (filtered.length === 0) return (
-            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
-              No sessions found for "{sessionSearch}"
-            </div>
-          )
-          return filtered.map((s, idx) => {
-            const c = candidates.find(x => x.id === s.user?.id)
-            const cName = c?.fullName || s.user?.fullName || s.user?.email || `User #${s.user?.id}`
-            const isSelected = s.id === currentSession?.id
-            return (
-              <div
-                key={s.id}
-                onClick={() => { loadAnalysisForSession(s.id); setSessionSearch('') }}
+        {completedSessions.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Search by candidate name or session ID..."
+                value={sessionSearch}
+                onChange={e => setSessionSearch(e.target.value)}
                 style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 14px',
-                  borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-                  background: isSelected ? '#2563EB10' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'background 0.15s',
+                  width: '100%', padding: '10px 14px 10px 36px',
+                  borderRadius: 'var(--radius)', border: '1px solid var(--border)',
+                  background: 'var(--surface2)', color: 'var(--text)',
+                  fontSize: '13px', fontFamily: 'var(--font-mono)',
+                  outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
                 }}
-                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface3)' }}
-                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{
-                    fontSize: '10px', fontFamily: 'var(--font-mono)',
-                    background: isSelected ? '#2563EB30' : 'var(--surface)',
-                    color: isSelected ? '#60A5FA' : 'var(--text-dim)',
-                    padding: '2px 7px', borderRadius: '5px',
-                  }}>#{s.id}</span>
-                  <span style={{ fontSize: '13px', color: isSelected ? '#60A5FA' : 'var(--text)', fontWeight: isSelected ? '600' : '400' }}>
-                    {cName}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    {s.jobRole?.replace(/_/g, ' ')}
-                  </span>
-                  <span style={{
-                    fontSize: '10px', fontFamily: 'var(--font-mono)',
-                    color: s.totalScore > 0 ? '#10B981' : 'var(--text-dim)',
-                  }}>
-                    {s.totalQuestions > 0 ? `${Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)}%` : '—'}
-                  </span>
-                </div>
+                onFocus={e => e.target.style.borderColor = '#2563EB'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+              />
+              <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--text-dim)', pointerEvents: 'none' }}>🔍</span>
+              {sessionSearch && (
+                <button onClick={() => setSessionSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '14px', padding: '0' }}>✕</button>
+              )}
+            </div>
+
+            {sessionSearch.trim() !== '' && (
+              <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
+                {(() => {
+                  const q = sessionSearch.toLowerCase().trim()
+                  const filtered = allCompletedSessions.filter(s => {
+                    const c = candidates.find(x => x.id === s.user?.id)
+                    const name = (c?.fullName || s.user?.fullName || s.user?.email || '').toLowerCase()
+                    return name.includes(q) || String(s.id).includes(q)
+                  })
+                  if (filtered.length === 0) return (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
+                      No sessions found for "{sessionSearch}"
+                    </div>
+                  )
+                  return filtered.map((s, idx) => {
+                    const c = candidates.find(x => x.id === s.user?.id)
+                    const cName = c?.fullName || s.user?.fullName || s.user?.email || `User #${s.user?.id}`
+                    const isSelected = s.id === currentSession?.id
+                    return (
+                      <div key={s.id} onClick={() => { loadAnalysisForSession(s.id); setSessionSearch('') }}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none', background: isSelected ? '#2563EB10' : 'transparent', cursor: 'pointer', transition: 'background 0.15s' }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface3)' }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', background: isSelected ? '#2563EB30' : 'var(--surface)', color: isSelected ? '#60A5FA' : 'var(--text-dim)', padding: '2px 7px', borderRadius: '5px' }}>#{s.id}</span>
+                          <span style={{ fontSize: '13px', color: isSelected ? '#60A5FA' : 'var(--text)', fontWeight: isSelected ? '600' : '400' }}>{cName}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{s.jobRole?.replace(/_/g, ' ')}</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: s.totalScore > 0 ? '#10B981' : 'var(--text-dim)' }}>
+                            {s.totalQuestions > 0 ? `${Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)}%` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
-            )
-          })
-        })()}
-      </div>
-    )}
+            )}
 
-    {/* Current session label */}
-    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-      Showing session #{currentSession?.id} —{' '}
-      <span style={{ color: 'var(--text-dim)' }}>
-        search above to find any session from all {allCompletedSessions.length} completed interviews
-      </span>
-    </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+              Showing session #{currentSession?.id} —{' '}
+              <span>search above to find any session from all {allCompletedSessions.length} completed interviews</span>
+            </div>
+          </div>
+        )}
 
-  </div>
-)}
-
-        {/* Header */}
         <div>
-          <p style={{ fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-            Most recent interview
-          </p>
-          <h2 style={{ fontSize: '20px', fontWeight: '700', fontFamily: 'var(--font-display)', margin: '4px 0' }}>
-            {candidateName}
-          </h2>
+          <p style={{ fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Most recent interview</p>
+          <h2 style={{ fontSize: '20px', fontWeight: '700', fontFamily: 'var(--font-display)', margin: '4px 0' }}>{candidateName}</h2>
           <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>
             {currentSession.jobRole?.replace(/_/g, ' ')} • Session #{currentSession.id} • {allQ.length} total questions
           </p>
         </div>
 
         {analysisLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
-            Loading analysis...
-          </div>
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>Loading analysis...</div>
         ) : allQ.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
-            No answered questions found for this session.
-          </div>
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>No answered questions found for this session.</div>
         ) : (
           <>
-            {/* Summary cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
               <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Questions</div>
@@ -641,18 +556,12 @@ const handleEndForCheating = () => {
               </div>
               {hasGroqAnalysis && (
                 <>
-                  <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Confidence</div>
-                    <div style={{ fontSize: '28px', fontWeight: '800', color: pctColor(avgConfidence) }}>{avgConfidence ?? '—'}%</div>
-                  </div>
-                  <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Authenticity</div>
-                    <div style={{ fontSize: '28px', fontWeight: '800', color: pctColor(avgAuthenticity) }}>{avgAuthenticity ?? '—'}%</div>
-                  </div>
-                  <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Accuracy</div>
-                    <div style={{ fontSize: '28px', fontWeight: '800', color: pctColor(avgAccuracy) }}>{avgAccuracy ?? '—'}%</div>
-                  </div>
+                  {[{ label: 'Confidence', val: avgConfidence }, { label: 'Authenticity', val: avgAuthenticity }, { label: 'Accuracy', val: avgAccuracy }].map(({ label, val }) => (
+                    <div key={label} className="card" style={{ padding: '16px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>{label}</div>
+                      <div style={{ fontSize: '28px', fontWeight: '800', color: pctColor(val) }}>{val ?? '—'}%</div>
+                    </div>
+                  ))}
                   <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Suspicious</div>
                     <div style={{ fontSize: '28px', fontWeight: '800', color: suspiciousCount > 0 ? '#EF4444' : '#10B981' }}>{suspiciousCount}</div>
@@ -661,75 +570,40 @@ const handleEndForCheating = () => {
               )}
             </div>
 
-            {/* All questions — AI and recruiter mixed, no distinction shown */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {allQ.map((q, idx) => (
-                <div key={idx} className="card" style={{
-                  padding: '20px',
-                  borderLeft: q.suspicious ? '4px solid #EF4444' : '4px solid #10B981',
-                }}>
+                <div key={idx} className="card" style={{ padding: '20px', borderLeft: q.suspicious ? '4px solid #EF4444' : '4px solid #10B981' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'var(--surface2)', padding: '3px 10px', borderRadius: '6px' }}>
-                      Q{idx + 1}
-                    </span>
+                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'var(--surface2)', padding: '3px 10px', borderRadius: '6px' }}>Q{idx + 1}</span>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      {q.suspicious && (
-                        <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: 'var(--font-mono)', padding: '3px 8px', background: '#EF444415', borderRadius: '6px' }}>
-                          ⚠️ Suspicious
-                        </span>
-                      )}
-                      {q.score != null && (
-                        <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(q.score * 10), background: `${pctColor(q.score * 10)}15`, padding: '3px 10px', borderRadius: '6px' }}>
-                          Score {q.score}/10
-                        </span>
-                      )}
+                      {q.suspicious && <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: 'var(--font-mono)', padding: '3px 8px', background: '#EF444415', borderRadius: '6px' }}>⚠️ Suspicious</span>}
+                      {q.score != null && <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(q.score * 10), background: `${pctColor(q.score * 10)}15`, padding: '3px 10px', borderRadius: '6px' }}>Score {q.score}/10</span>}
                     </div>
                   </div>
-
-                  <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #2563EB' }}>
-                    {q.questionText}
-                  </p>
-
+                  <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #2563EB' }}>{q.questionText}</p>
                   <div style={{ background: 'var(--surface2)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
-                    <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                      Candidate Answer
-                    </p>
-                    <p style={{ fontSize: '13px', color: 'var(--text)', margin: 0, lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-                      {q.userAnswer}
-                    </p>
+                    <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>Candidate Answer</p>
+                    <p style={{ fontSize: '13px', color: 'var(--text)', margin: 0, lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{q.userAnswer}</p>
                   </div>
-
                   {q.aiFeedback && (
                     <div style={{ background: '#1e293b', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
-                      <p style={{ fontSize: '10px', color: '#818cf8', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                        AI Feedback
-                      </p>
-                      <p style={{ fontSize: '13px', color: '#cbd5e1', margin: 0, lineHeight: '1.6' }}>
-                        {q.aiFeedback}
-                      </p>
+                      <p style={{ fontSize: '10px', color: '#818cf8', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>AI Feedback</p>
+                      <p style={{ fontSize: '13px', color: '#cbd5e1', margin: 0, lineHeight: '1.6' }}>{q.aiFeedback}</p>
                     </div>
                   )}
-
                   {hasGroqAnalysis && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
-                      {[
-                        { label: 'Confidence', value: q.confidence },
-                        { label: 'Authenticity', value: q.authenticity },
-                        { label: 'Accuracy', value: q.accuracy },
-                      ].map(({ label, value }) => (
+                      {[{ label: 'Confidence', value: q.confidence }, { label: 'Authenticity', value: q.authenticity }, { label: 'Accuracy', value: q.accuracy }].map(({ label, value }) => (
                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: '90px' }}>{label}</span>
                           <div style={{ flex: 1, height: '6px', background: 'var(--surface2)', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${value || 0}%`, background: pctColor(value), borderRadius: '3px', transition: 'width 0.3s ease' }} />
                           </div>
-                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(value), width: '36px', textAlign: 'right' }}>
-                            {value ?? 0}%
-                          </span>
+                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(value), width: '36px', textAlign: 'right' }}>{value ?? 0}%</span>
                         </div>
                       ))}
                     </div>
                   )}
-
                   {q.reason && (
                     <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)', fontSize: '11px', color: '#A78BFA', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>
                       💬 {q.reason}
@@ -747,145 +621,45 @@ const handleEndForCheating = () => {
   return (
     <div style={{ minHeight: '100vh', fontFamily: 'var(--font-body)' }}>
 
-      {/* Second violation popup */}
-{showEndPopup && (
-  <div style={{
-    position: 'fixed',
-    top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 9999,
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    paddingTop: '80px',
-    background: 'rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(4px)',
-    animation: 'fadeIn 0.2s ease',
-  }}>
-    <div style={{
-      background: '#0D1117',
-      border: '2px solid #EF4444',
-      borderRadius: '16px',
-      padding: '32px 36px',
-      maxWidth: '460px',
-      width: '90%',
-      boxShadow: '0 0 80px rgba(239,68,68,0.4)',
-      animation: 'fadeUp 0.3s ease',
-      position: 'relative',
-    }}>
-      {/* Red top bar */}
-      <div style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0,
-        height: '4px',
-        background: 'linear-gradient(90deg, #EF4444, #F97316)',
-        borderRadius: '16px 16px 0 0',
-      }} />
-
-      {/* Icon + title */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-        <div style={{
-          width: '44px', height: '44px',
-          borderRadius: '50%',
-          background: '#EF444420',
-          border: '2px solid #EF444460',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '20px', flexShrink: 0,
-        }}>🚨</div>
-        <div>
-          <h3 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '18px', fontWeight: '800',
-            color: '#EF4444', margin: 0,
-          }}>
-            Second Violation Detected
-          </h3>
-          <p style={{
-            fontSize: '12px', color: 'var(--text-dim)',
-            fontFamily: 'var(--font-mono)', margin: '2px 0 0',
-          }}>
-            Session #{activeSessionId} — {selectedCandidate?.fullName || 'Candidate'}
-          </p>
-        </div>
-      </div>
-
-      {/* Violation detail */}
-      {latestViolation && (
-        <div style={{
-          background: '#EF444410',
-          border: '1px solid #EF444430',
-          borderRadius: '8px',
-          padding: '10px 14px',
-          marginBottom: '16px',
-        }}>
-          <p style={{ fontSize: '11px', color: '#F87171', fontFamily: 'var(--font-mono)', margin: 0 }}>
-            {getEventIcon(latestViolation.eventType)} {formatEventType(latestViolation.eventType)}
-            {latestViolation.pastedText && ` — "${latestViolation.pastedText.substring(0, 60)}..."`}
-          </p>
+      {/* ── Second violation popup ── */}
+      {showEndPopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease' }}>
+          <div style={{ background: '#0D1117', border: '2px solid #EF4444', borderRadius: '16px', padding: '32px 36px', maxWidth: '460px', width: '90%', boxShadow: '0 0 80px rgba(239,68,68,0.4)', animation: 'fadeUp 0.3s ease', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #EF4444, #F97316)', borderRadius: '16px 16px 0 0' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EF444420', border: '2px solid #EF444460', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>🚨</div>
+              <div>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '800', color: '#EF4444', margin: 0 }}>Second Violation Detected</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '2px 0 0' }}>Session #{activeSessionId} — {selectedCandidate?.fullName || 'Candidate'}</p>
+              </div>
+            </div>
+            {latestViolation && (
+              <div style={{ background: '#EF444410', border: '1px solid #EF444430', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px' }}>
+                <p style={{ fontSize: '11px', color: '#F87171', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                  {getEventIcon(latestViolation.eventType)} {formatEventType(latestViolation.eventType)}
+                  {latestViolation.pastedText && ` — "${latestViolation.pastedText.substring(0, 60)}..."`}
+                </p>
+              </div>
+            )}
+            <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.7', marginBottom: '24px' }}>
+              The candidate has committed a <strong style={{ color: '#EF4444' }}>second violation</strong>. A warning was already sent after the first. Do you want to <strong style={{ color: 'white' }}>terminate this interview</strong> immediately?
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={handleEndForCheating} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: '#EF4444', color: 'white', border: 'none', fontWeight: '700', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#DC2626'} onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}>
+                Yes, End Interview
+              </button>
+              <button onClick={() => { setShowEndPopup(false); setViolationCount(1) }} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', fontWeight: '600', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s ease' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}>
+                No, Continue
+              </button>
+            </div>
+            <p style={{ textAlign: 'center', marginTop: '14px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Choosing "No" will reset to 1 warning. Next violation will prompt again.
+            </p>
+          </div>
         </div>
       )}
 
-      <p style={{
-        fontSize: '14px',
-        color: 'var(--text)',
-        lineHeight: '1.7',
-        marginBottom: '24px',
-        fontFamily: 'var(--font-body)',
-      }}>
-        The candidate has committed a <strong style={{ color: '#EF4444' }}>second violation</strong>.
-        A warning was already sent after the first.
-        Do you want to <strong style={{ color: 'white' }}>terminate this interview</strong> immediately?
-      </p>
-
-      {/* Buttons */}
-      <div style={{ display: 'flex', gap: '12px' }}>
-        <button
-          onClick={handleEndForCheating}
-          style={{
-            flex: 1, padding: '12px',
-            borderRadius: '10px',
-            background: '#EF4444',
-            color: 'white', border: 'none',
-            fontWeight: '700', fontSize: '14px',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-body)',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = '#DC2626'}
-          onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}
-        >
-          Yes, End Interview
-        </button>
-        <button
-          onClick={() => { setShowEndPopup(false); setViolationCount(1) }}
-          style={{
-            flex: 1, padding: '12px',
-            borderRadius: '10px',
-            background: 'transparent',
-            color: 'var(--text-dim)',
-            border: '1px solid var(--border)',
-            fontWeight: '600', fontSize: '14px',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-body)',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}
-        >
-          No, Continue
-        </button>
-      </div>
-
-      <p style={{
-        textAlign: 'center', marginTop: '14px',
-        fontSize: '11px', color: 'var(--text-muted)',
-        fontFamily: 'var(--font-mono)',
-      }}>
-        Choosing "No" will reset to 1 warning. Next violation will prompt again.
-      </p>
-    </div>
-  </div>
-)}
-
+      {/* ── Navbar ── */}
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 32px', height: '64px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '32px', height: '32px', background: 'linear-gradient(135deg, #2563EB, #06B6D4)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: 'white' }}>AI</div>
@@ -905,12 +679,13 @@ const handleEndForCheating = () => {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', fontWeight: '800' }}>Interview Control Center</h1>
         </div>
 
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border)', marginBottom: '32px' }}>
           {[
             { id: 'live', label: 'Live Interview' },
             { id: 'reports', label: 'Analysis Reports' },
             { id: 'resume', label: 'Resume Screening' },
+            { id: 'candidates', label: 'Candidates' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -930,78 +705,42 @@ const handleEndForCheating = () => {
           ))}
         </div>
 
-        {/* LIVE INTERVIEW TAB */}
+        {/* ── Live Interview Tab ── */}
         {activeTab === 'live' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-<div className="card" style={{ padding: '24px' }}>
-  <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>
-    01 — Select Candidate
-  </p>
-  {loading ? (
-    <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Loading candidates...</p>
-  ) : (
-    <div style={{ position: 'relative' }}>
-      <select
-        value={selectedCandidate?.id || ''}
-        onChange={(e) => {
-          const found = candidates.find(c => String(c.id) === e.target.value)
-          setSelectedCandidate(found || null)
-          if (found) {
-            sessionStorage.setItem('recruiter_selected_candidate', JSON.stringify(found))
-          } else {
-            sessionStorage.removeItem('recruiter_selected_candidate')
-          }
-        }}
-        style={{
-          width: '100%',
-          padding: '12px 40px 12px 14px',
-          borderRadius: 'var(--radius)',
-          border: `1px solid ${selectedCandidate ? '#2563EB60' : 'var(--border)'}`,
-          background: 'var(--surface2)',
-          color: selectedCandidate ? 'var(--text)' : 'var(--text-dim)',
-          fontSize: '14px',
-          fontFamily: 'var(--font-body)',
-          outline: 'none',
-          cursor: 'pointer',
-          appearance: 'none',
-          WebkitAppearance: 'none',
-        }}
-      >
-        <option value="">— Select a candidate —</option>
-        {candidates.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.fullName} ({c.email})
-          </option>
-        ))}
-      </select>
-      {/* Arrow icon */}
-      <div style={{
-        position: 'absolute', right: '12px', top: '50%',
-        transform: 'translateY(-50%)', pointerEvents: 'none',
-        color: 'var(--text-dim)',
-      }}>
-        ▾
-      </div>
-    </div>
-  )}
-</div>
+              <div className="card" style={{ padding: '24px' }}>
+                <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>01 — Select Candidate</p>
+                {loading ? (
+                  <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Loading candidates...</p>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    <select
+                      value={selectedCandidate?.id || ''}
+                      onChange={(e) => {
+                        const found = candidates.find(c => String(c.id) === e.target.value)
+                        setSelectedCandidate(found || null)
+                        if (found) sessionStorage.setItem('recruiter_selected_candidate', JSON.stringify(found))
+                        else sessionStorage.removeItem('recruiter_selected_candidate')
+                      }}
+                      style={{ width: '100%', padding: '12px 40px 12px 14px', borderRadius: 'var(--radius)', border: `1px solid ${selectedCandidate ? '#2563EB60' : 'var(--border)'}`, background: 'var(--surface2)', color: selectedCandidate ? 'var(--text)' : 'var(--text-dim)', fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none', cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}
+                    >
+                      <option value="">— Select a candidate —</option>
+                      {candidates.map((c) => (
+                        <option key={c.id} value={c.id}>{c.fullName} ({c.email})</option>
+                      ))}
+                    </select>
+                    <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-dim)' }}>▾</div>
+                  </div>
+                )}
+              </div>
 
               <div className="card" style={{ padding: '24px' }}>
                 <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>02 — Job Role</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {JOB_ROLES.map((r) => (
-                    <button key={r} onClick={() => setSelectedRole(r)} style={{
-                      padding: '12px 16px', borderRadius: 'var(--radius)',
-                      border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`,
-                      background: selectedRole === r ? '#2563EB10' : 'var(--surface2)',
-                      color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)',
-                      fontWeight: selectedRole === r ? '600' : '400',
-                      fontSize: '14px', textAlign: 'left',
-                      transition: 'all 0.2s ease', cursor: 'pointer',
-                    }}>
+                    <button key={r} onClick={() => setSelectedRole(r)} style={{ padding: '12px 16px', borderRadius: 'var(--radius)', border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`, background: selectedRole === r ? '#2563EB10' : 'var(--surface2)', color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)', fontWeight: selectedRole === r ? '600' : '400', fontSize: '14px', textAlign: 'left', transition: 'all 0.2s ease', cursor: 'pointer' }}>
                       {r.replace(/_/g, ' ')}
                     </button>
                   ))}
@@ -1015,44 +754,25 @@ const handleEndForCheating = () => {
                     {selectedCandidate.fullName} / {selectedRole.replace(/_/g, ' ')}
                   </div>
                 )}
-                <button
-                  className="btn-primary"
-                  onClick={handleStart}
-                  disabled={starting || Boolean(activeSessionId)}
-                  style={{ width: '100%', padding: '14px', fontSize: '15px' }}
-                >
+                <button className="btn-primary" onClick={handleStart} disabled={starting || Boolean(activeSessionId)} style={{ width: '100%', padding: '14px', fontSize: '15px' }}>
                   {starting ? 'Starting...' : activeSessionId ? 'Interview Running' : 'Launch Interview'}
                 </button>
                 {message && (
-                  <p style={{ marginTop: '12px', fontSize: '13px', color: messageType === 'success' ? '#34D399' : '#F87171', fontFamily: 'var(--font-mono)' }}>
-                    {message}
-                  </p>
+                  <p style={{ marginTop: '12px', fontSize: '13px', color: messageType === 'success' ? '#34D399' : '#F87171', fontFamily: 'var(--font-mono)' }}>{message}</p>
                 )}
               </div>
 
               {proctoringAlerts.length > 0 && (
                 <div className="card" style={{ padding: '24px', background: '#1a0a0a', borderColor: '#7F1D1D' }}>
-                  <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#EF4444', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>
-                    🚨 Security Alerts ({proctoringAlerts.length})
-                  </p>
+                  <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#EF4444', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>🚨 Security Alerts ({proctoringAlerts.length})</p>
                   <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {proctoringAlerts.map((alert, idx) => (
-                      <div key={idx} style={{
-                        padding: '12px', background: '#1f0a0a',
-                        border: '1px solid #7F1D1D', borderRadius: '8px',
-                        borderLeft: `4px solid ${alert.eventType === 'PASTE_DETECTED' ? '#EF4444' : alert.eventType === 'ALT_TAB_DETECTED' ? '#F97316' : '#EC4899'}`,
-                      }}>
+                      <div key={idx} style={{ padding: '12px', background: '#1f0a0a', border: '1px solid #7F1D1D', borderRadius: '8px', borderLeft: `4px solid ${alert.eventType === 'PASTE_DETECTED' ? '#EF4444' : alert.eventType === 'ALT_TAB_DETECTED' ? '#F97316' : '#EC4899'}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontWeight: '600', fontSize: '13px', color: '#EF4444' }}>
-                            {getEventIcon(alert.eventType)} {formatEventType(alert.eventType)}
-                          </span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                            {new Date(alert.timestamp).toLocaleTimeString()}
-                          </span>
+                          <span style={{ fontWeight: '600', fontSize: '13px', color: '#EF4444' }}>{getEventIcon(alert.eventType)} {formatEventType(alert.eventType)}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{new Date(alert.timestamp).toLocaleTimeString()}</span>
                         </div>
-                        <p style={{ fontSize: '12px', color: '#FCA5A5', margin: '4px 0' }}>
-                          {getAlertDescription(alert)}
-                        </p>
+                        <p style={{ fontSize: '12px', color: '#FCA5A5', margin: '4px 0' }}>{getAlertDescription(alert)}</p>
                       </div>
                     ))}
                   </div>
@@ -1073,38 +793,15 @@ const handleEndForCheating = () => {
                   )}
                   {activeSessionId && (
                     <>
-                      <button
-                        onClick={handlePauseResume}
-                        disabled={isStopped || !wsConnected}
-                        style={{
-                          padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
-                          cursor: (isStopped || !wsConnected) ? 'not-allowed' : 'pointer',
-                          border: isPaused ? '1px solid #10B98160' : '1px solid #F9731660',
-                          background: isPaused ? '#10B98115' : '#F9731615',
-                          color: isPaused ? '#10B981' : '#F97316',
-                          transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)',
-                          opacity: (isStopped || !wsConnected) ? 0.4 : 1,
-                        }}
-                      >
+                      <button onClick={handlePauseResume} disabled={isStopped || !wsConnected} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: (isStopped || !wsConnected) ? 'not-allowed' : 'pointer', border: isPaused ? '1px solid #10B98160' : '1px solid #F9731660', background: isPaused ? '#10B98115' : '#F9731615', color: isPaused ? '#10B981' : '#F97316', transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)', opacity: (isStopped || !wsConnected) ? 0.4 : 1 }}>
                         {isPaused ? 'Resume' : 'Pause'}
                       </button>
                       {!isStopped ? (
-                        <button onClick={handleStop} style={{
-                          padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
-                          cursor: 'pointer', border: '1px solid #EF444460',
-                          background: '#EF444415', color: '#EF4444',
-                          transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)',
-                        }}>
-                          End Interview
-                        </button>
+                        <button onClick={handleStop} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)' }}>End Interview</button>
                       ) : (
-                        <span style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>
-                          Stopped
-                        </span>
+                        <span style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>Stopped</span>
                       )}
-                      <span className="badge badge-green" style={{ animation: 'pulse-glow 2s infinite' }}>
-                        Live #{activeSessionId}
-                      </span>
+                      <span className="badge badge-green" style={{ animation: 'pulse-glow 2s infinite' }}>Live #{activeSessionId}</span>
                     </>
                   )}
                 </div>
@@ -1116,7 +813,6 @@ const handleEndForCheating = () => {
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>Full analysis report available in Reports tab.</p>
                 </div>
               )}
-
               {activeSessionId && !wsConnected && !isStopped && (
                 <div style={{ padding: '10px 16px', background: '#2563EB10', border: '1px solid #2563EB40', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
                   <p style={{ fontSize: '12px', color: '#60A5FA', fontFamily: 'var(--font-mono)', margin: 0 }}>Connecting to WebSocket...</p>
@@ -1127,10 +823,7 @@ const handleEndForCheating = () => {
                 {!activeSessionId ? (
                   <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', opacity: 0.4 }}>
-                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B">
-                        <rect x="2" y="3" width="20" height="14" rx="2"/>
-                        <path d="M8 21h8M12 17v4"/>
-                      </svg>
+                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
                       <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
                     </div>
@@ -1148,31 +841,15 @@ const handleEndForCheating = () => {
                         return an - bn
                       })
                       .map(([qNum, data]) => (
-                        <div key={qNum} style={{
-                          background: 'var(--surface2)',
-                          border: `1px solid ${data.status === 'SUBMITTED' ? '#10B98140' : '#F9731640'}`,
-                          borderRadius: 'var(--radius)', padding: '16px',
-                        }}>
+                        <div key={qNum} style={{ background: 'var(--surface2)', border: `1px solid ${data.status === 'SUBMITTED' ? '#10B98140' : '#F9731640'}`, borderRadius: 'var(--radius)', padding: '16px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>
-                              {qNum === 'R' ? 'Recruiter Q' : `Q${qNum}`}
-                            </span>
-                            <span className={`badge ${data.status === 'SUBMITTED' ? 'badge-green' : 'badge-orange'}`}>
-                              {data.status === 'SUBMITTED' ? 'Submitted' : 'Typing'}
-                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>{qNum === 'R' ? 'Recruiter Q' : `Q${qNum}`}</span>
+                            <span className={`badge ${data.status === 'SUBMITTED' ? 'badge-green' : 'badge-orange'}`}>{data.status === 'SUBMITTED' ? 'Submitted' : 'Typing'}</span>
                           </div>
                           <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '10px' }}>{data.questionText}</p>
-                          <div style={{
-                            background: 'var(--surface)', border: '1px solid var(--border)',
-                            borderRadius: '8px', padding: '12px',
-                            fontSize: '13px', fontFamily: 'var(--font-mono)',
-                            color: 'var(--text)', minHeight: '40px',
-                            whiteSpace: 'pre-wrap', lineHeight: '1.6',
-                          }}>
+                          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text)', minHeight: '40px', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
                             {data.currentAnswer || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                            {data.status === 'TYPING' && (
-                              <span style={{ display: 'inline-block', width: '2px', height: '14px', background: 'var(--cyan)', marginLeft: '2px', animation: 'blink 1s infinite', verticalAlign: 'middle' }} />
-                            )}
+                            {data.status === 'TYPING' && <span style={{ display: 'inline-block', width: '2px', height: '14px', background: 'var(--cyan)', marginLeft: '2px', animation: 'blink 1s infinite', verticalAlign: 'middle' }} />}
                           </div>
                           {data.status === 'SUBMITTED' && renderLiveAnalysis(data)}
                         </div>
@@ -1183,11 +860,7 @@ const handleEndForCheating = () => {
 
               {activeSessionId && !isStopped && (
                 <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {isPaused && (
-                    <p style={{ fontSize: '12px', color: '#F97316', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                      Paused — candidate is waiting. Ask your question below.
-                    </p>
-                  )}
+                  {isPaused && <p style={{ fontSize: '12px', color: '#F97316', fontFamily: 'var(--font-mono)', margin: 0 }}>Paused — candidate is waiting. Ask your question below.</p>}
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <input
                       value={recruiterQuestion}
@@ -1195,22 +868,9 @@ const handleEndForCheating = () => {
                       onKeyDown={(e) => { if (e.key === 'Enter') handleRecruiterQuestion() }}
                       placeholder={isPaused ? 'Ask your question now...' : 'Pause first, then ask a question...'}
                       disabled={!isPaused}
-                      style={{
-                        flex: 1, padding: '12px 14px', borderRadius: 'var(--radius)',
-                        border: `1px solid ${isPaused ? '#F9731660' : 'var(--border)'}`,
-                        background: 'var(--surface2)', color: 'var(--text)',
-                        fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none',
-                        opacity: isPaused ? 1 : 0.5,
-                      }}
+                      style={{ flex: 1, padding: '12px 14px', borderRadius: 'var(--radius)', border: `1px solid ${isPaused ? '#F9731660' : 'var(--border)'}`, background: 'var(--surface2)', color: 'var(--text)', fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none', opacity: isPaused ? 1 : 0.5 }}
                     />
-                    <button
-                      onClick={handleRecruiterQuestion}
-                      disabled={!recruiterQuestion.trim() || !isPaused}
-                      className="btn-primary"
-                      style={{ padding: '12px 20px', fontSize: '14px', flexShrink: 0, opacity: !recruiterQuestion.trim() || !isPaused ? 0.5 : 1 }}
-                    >
-                      Ask
-                    </button>
+                    <button onClick={handleRecruiterQuestion} disabled={!recruiterQuestion.trim() || !isPaused} className="btn-primary" style={{ padding: '12px 20px', fontSize: '14px', flexShrink: 0, opacity: !recruiterQuestion.trim() || !isPaused ? 0.5 : 1 }}>Ask</button>
                   </div>
                 </div>
               )}
@@ -1234,6 +894,14 @@ const handleEndForCheating = () => {
             generated={rsGenerated}
             setGenerated={setRsGenerated}
             conversationRef={rsConversationRef}
+          />
+        )}
+
+        {activeTab === 'candidates' && (
+          <CandidatesTab 
+            candidates={candidates} 
+            sessions={allCompletedSessions}
+            loading={sessionsLoading}
           />
         )}
       </div>
