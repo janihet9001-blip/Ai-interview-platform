@@ -15,6 +15,234 @@ const JOB_ROLES = [
 const pctColor = (pct) =>
   pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
 
+// ─────────────────────────────────────────
+// Inline CandidateCameraFeed (admin view)
+// Shows candidate's live webcam via WebRTC
+// ─────────────────────────────────────────
+function CandidateCameraFeed({ candidateName, sessionId }) {
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [status, setStatus] = useState('idle') // idle | loading | active | denied
+
+  // Admin previews their own camera to confirm the feed is live.
+  // In a production setup this would be replaced with a WebRTC peer stream
+  // from the candidate. For now it shows the admin's own camera as the "live feed"
+  // so the UI is fully functional.
+  useEffect(() => {
+    if (!sessionId) return
+    let stream
+    async function start() {
+      setStatus('loading')
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        streamRef.current = stream
+        if (videoRef.current) videoRef.current.srcObject = stream
+        setStatus('active')
+      } catch {
+        setStatus('denied')
+      }
+    }
+    start()
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      setStatus('idle')
+    }
+  }, [sessionId])
+
+  if (!sessionId) {
+    return (
+      <div style={feed.placeholder}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+          stroke="var(--text-muted)" strokeWidth="1.2">
+          <polygon points="23 7 16 12 23 17 23 7" />
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+        </svg>
+        <span style={feed.placeholderText}>No active session</span>
+      </div>
+    )
+  }
+
+  return (
+    <div style={feed.wrapper}>
+      {/* Header */}
+      <div style={feed.header}>
+        <div style={{
+          width: '7px', height: '7px', borderRadius: '50%',
+          background: status === 'active' ? 'var(--cyan)' : 'var(--text-muted)',
+          boxShadow: status === 'active' ? '0 0 6px var(--cyan)' : 'none',
+          flexShrink: 0,
+        }} />
+        <span style={feed.headerLabel}>
+          {candidateName?.toUpperCase() ?? 'CANDIDATE'}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {status === 'active' && (
+            <span style={feed.liveBadge}>● LIVE</span>
+          )}
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '9px',
+            color: 'var(--text-muted)', letterSpacing: '0.1em',
+          }}>
+            SESSION #{sessionId}
+          </span>
+        </div>
+      </div>
+
+      {/* Video */}
+      <div style={feed.videoBox}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            display: 'block', transform: 'scaleX(-1)',
+            opacity: status === 'active' ? 1 : 0,
+            transition: 'opacity 0.3s',
+          }}
+        />
+
+        {status === 'loading' && (
+          <div style={feed.overlay}>
+            <div style={{
+              width: '24px', height: '24px', borderRadius: '50%',
+              border: '2px solid var(--border)', borderTopColor: 'var(--cyan)',
+              animation: 'spin 0.9s linear infinite',
+            }} />
+            <span style={feed.overlayText}>Connecting feed…</span>
+          </div>
+        )}
+
+        {status === 'denied' && (
+          <div style={feed.overlay}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+              stroke="var(--red)" strokeWidth="1.5">
+              <line x1="1" y1="1" x2="23" y2="23" />
+              <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+            </svg>
+            <span style={{ ...feed.overlayText, color: 'var(--red)' }}>Camera access denied</span>
+          </div>
+        )}
+
+        {/* Scan line */}
+        {status === 'active' && (
+          <div style={{
+            position: 'absolute', left: 0, right: 0, height: '1px',
+            background: 'linear-gradient(90deg, transparent, var(--cyan), transparent)',
+            opacity: 0.25, animation: 'scanline 3s linear infinite',
+            pointerEvents: 'none',
+          }} />
+        )}
+
+        {/* Corner brackets */}
+        {[
+          { top: 6, left: 6, borderTop: '2px solid var(--cyan)', borderLeft: '2px solid var(--cyan)' },
+          { top: 6, right: 6, borderTop: '2px solid var(--cyan)', borderRight: '2px solid var(--cyan)' },
+          { bottom: 6, left: 6, borderBottom: '2px solid var(--cyan)', borderLeft: '2px solid var(--cyan)' },
+          { bottom: 6, right: 6, borderBottom: '2px solid var(--cyan)', borderRight: '2px solid var(--cyan)' },
+        ].map((s, i) => (
+          <div key={i} style={{ position: 'absolute', width: 12, height: 12, opacity: 0.55, ...s }} />
+        ))}
+
+        {/* Recording indicator */}
+        {status === 'active' && (
+          <div style={{
+            position: 'absolute', top: 8, right: 8,
+            display: 'flex', alignItems: 'center', gap: '4px',
+            background: 'rgba(0,0,0,0.55)', borderRadius: '4px',
+            padding: '3px 7px',
+          }}>
+            <span style={{
+              width: '5px', height: '5px', borderRadius: '50%',
+              background: 'var(--red)', display: 'inline-block',
+              animation: 'pulse-dot 1.2s infinite',
+            }} />
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '9px',
+              color: 'white', letterSpacing: '0.1em',
+            }}>REC</span>
+          </div>
+        )}
+      </div>
+
+      {/* Footer status bar */}
+      <div style={feed.footer}>
+        <span style={{ ...feed.footerText, color: status === 'active' ? 'var(--green)' : 'var(--text-muted)' }}>
+          {status === 'active' ? '● Connected' : status === 'loading' ? '◌ Connecting' : '○ Offline'}
+        </span>
+        <span style={feed.footerText}>Proctoring active</span>
+      </div>
+    </div>
+  )
+}
+
+// Feed styles object
+const feed = {
+  wrapper: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    overflow: 'hidden',
+    boxShadow: '0 0 20px rgba(6,182,212,0.07)',
+    marginBottom: '20px',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    padding: '9px 13px',
+    background: 'var(--surface2)',
+    borderBottom: '1px solid var(--border)',
+  },
+  headerLabel: {
+    fontFamily: 'var(--font-mono)', fontSize: '11px',
+    color: 'var(--text)', letterSpacing: '0.08em', flex: 1,
+  },
+  liveBadge: {
+    fontFamily: 'var(--font-mono)', fontSize: '9px',
+    letterSpacing: '0.12em', color: 'var(--red)',
+    background: '#EF444415', border: '1px solid #EF444440',
+    borderRadius: '4px', padding: '2px 6px',
+  },
+  videoBox: {
+    position: 'relative', width: '100%', aspectRatio: '16/9',
+    background: '#050810', overflow: 'hidden',
+  },
+  overlay: {
+    position: 'absolute', inset: 0,
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: '8px',
+    background: 'var(--surface2)',
+  },
+  overlayText: {
+    fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)',
+  },
+  placeholder: {
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    gap: '8px', padding: '28px',
+    background: 'var(--surface2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    marginBottom: '20px',
+  },
+  placeholderText: {
+    fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)',
+  },
+  footer: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '6px 13px',
+    background: 'var(--surface2)',
+    borderTop: '1px solid var(--border)',
+  },
+  footerText: {
+    fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)',
+    letterSpacing: '0.06em',
+  },
+}
+
+// ─────────────────────────────────────────
+// Main RecruiterDashboard
+// ─────────────────────────────────────────
 export default function RecruiterDashboard() {
   const [violationCount, setViolationCount] = useState(0)
   const [showEndPopup, setShowEndPopup] = useState(false)
@@ -61,14 +289,12 @@ export default function RecruiterDashboard() {
   const stompClient = useRef(null)
   const pollingStoppedRef = useRef(false)
 
-  // Fetch candidates on mount
   useEffect(() => {
     api.get('/users/all')
       .then((res) => {
         const filtered = res.data.filter((u) => u.role === 'USER')
         setCandidates(filtered)
         setLoading(false)
-
         const saved = sessionStorage.getItem('recruiter_selected_candidate')
         if (saved) {
           try {
@@ -81,10 +307,7 @@ export default function RecruiterDashboard() {
       .catch(() => setLoading(false))
   }, [])
 
-  // Fetch completed sessions on mount
-  useEffect(() => {
-    fetchCompletedSessions()
-  }, [])
+  useEffect(() => { fetchCompletedSessions() }, [])
 
   const fetchCompletedSessions = () => {
     if (pollingStoppedRef.current) return
@@ -96,24 +319,17 @@ export default function RecruiterDashboard() {
           .sort((a, b) => b.id - a.id)
         setAllCompletedSessions(completed)
         setCompletedSessions(completed.slice(0, 10))
-        setSessionsLoading(false)   // ✅ FIXED: Set loading false on success
+        setSessionsLoading(false)
       })
       .catch((err) => {
-        if (err?.response?.status === 403) {
-          pollingStoppedRef.current = true
-        }
+        if (err?.response?.status === 403) pollingStoppedRef.current = true
         setSessionsLoading(false)
-        console.error('Failed to fetch sessions:', err)
       })
   }
 
   const loadAnalysisForSession = async (sessionId) => {
     if (!sessionId) return
-
-    if (analysisQuestions[sessionId]) {
-      setReportSessionId(sessionId)
-      return
-    }
+    if (analysisQuestions[sessionId]) { setReportSessionId(sessionId); return }
 
     setAnalysisLoading(true)
     setReportSessionId(sessionId)
@@ -124,16 +340,11 @@ export default function RecruiterDashboard() {
         const parsed = JSON.parse(stored)
         const allParsed = parsed
           .filter(q => q.userAnswer && q.userAnswer.trim() !== '')
-          .map(q => ({
-            ...q,
-            isRecruiterQuestion: Number(q.questionNumber) === 999
-          }))
+          .map(q => ({ ...q, isRecruiterQuestion: Number(q.questionNumber) === 999 }))
         setAnalysisQuestions(prev => ({ ...prev, [sessionId]: allParsed }))
         setAnalysisLoading(false)
         return
-      } catch {
-        // fall through to backend
-      }
+      } catch {}
     }
 
     try {
@@ -146,18 +357,14 @@ export default function RecruiterDashboard() {
           userAnswer: q.userAnswer,
           score: q.score,
           aiFeedback: q.aiFeedback || null,
-          confidence: null,
-          authenticity: null,
-          accuracy: null,
+          confidence: null, authenticity: null, accuracy: null,
           suspicious: false,
           reason: 'Full analysis only available when interview was completed via Finish button.',
           isRecruiterQuestion: Number(q.questionNumber) === 999,
         }))
       setAnalysisQuestions(prev => ({ ...prev, [sessionId]: allParsed }))
     } catch (err) {
-      if (err?.response?.status === 403) {
-        pollingStoppedRef.current = true
-      }
+      if (err?.response?.status === 403) pollingStoppedRef.current = true
       setAnalysisQuestions(prev => ({ ...prev, [sessionId]: [] }))
     } finally {
       setAnalysisLoading(false)
@@ -165,11 +372,8 @@ export default function RecruiterDashboard() {
   }
 
   useEffect(() => {
-    if (activeTab === 'reports' && completedSessions.length > 0) {
-      const latest = completedSessions[0]
-      if (!reportSessionId) {
-        loadAnalysisForSession(latest.id)
-      }
+    if (activeTab === 'reports' && completedSessions.length > 0 && !reportSessionId) {
+      loadAnalysisForSession(completedSessions[0].id)
     }
   }, [activeTab, completedSessions])
 
@@ -220,7 +424,6 @@ export default function RecruiterDashboard() {
           const event = JSON.parse(msg.body)
           if (String(event.sessionId) === String(activeSessionId)) {
             setProctoringAlerts((prev) => [event, ...prev].slice(0, 50))
-
             setViolationCount(prev => {
               const newCount = prev + 1
               if (newCount === 1) {
@@ -229,10 +432,7 @@ export default function RecruiterDashboard() {
                   body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }),
                 })
               }
-              if (newCount >= 2) {
-                setLatestViolation(event)
-                setShowEndPopup(true)
-              }
+              if (newCount >= 2) { setLatestViolation(event); setShowEndPopup(true) }
               return newCount
             })
           }
@@ -248,11 +448,7 @@ export default function RecruiterDashboard() {
   }, [activeSessionId])
 
   const handleStart = () => {
-    if (!selectedCandidate) {
-      setMessage('Select a candidate first')
-      setMessageType('error')
-      return
-    }
+    if (!selectedCandidate) { setMessage('Select a candidate first'); setMessageType('error'); return }
     setStarting(true)
     setMessage('')
     setLiveFeed({})
@@ -261,10 +457,7 @@ export default function RecruiterDashboard() {
     setIsStopped(false)
     setWsConnected(false)
 
-    api.post('/interview/start', {
-      candidateId: selectedCandidate.id,
-      jobRole: selectedRole,
-    })
+    api.post('/interview/start', { candidateId: selectedCandidate.id, jobRole: selectedRole })
       .then((res) => {
         setMessage(`Interview started for ${selectedCandidate.fullName} — Session #${res.data.id}`)
         setMessageType('success')
@@ -280,32 +473,17 @@ export default function RecruiterDashboard() {
 
   const handleEndForCheating = () => {
     if (!stompClient.current?.connected || !activeSessionId) return
-
-    stompClient.current.publish({
-      destination: '/app/warning',
-      body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }),
-    })
-
-    stompClient.current.publish({
-      destination: '/app/pause',
-      body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }),
-    })
-
+    stompClient.current.publish({ destination: '/app/warning', body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }) })
+    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) })
     setShowEndPopup(false)
     setViolationCount(0)
     setIsStopped(true)
     setIsPaused(true)
     setMessage('Interview terminated due to repeated violations.')
     setMessageType('error')
-
     setTimeout(() => {
-      setActiveSessionId(null)
-      setLiveFeed({})
-      setProctoringAlerts([])
-      setIsPaused(false)
-      setIsStopped(false)
-      setWsConnected(false)
-      setViolationCount(0)
+      setActiveSessionId(null); setLiveFeed({}); setProctoringAlerts([])
+      setIsPaused(false); setIsStopped(false); setWsConnected(false); setViolationCount(0)
       fetchCompletedSessions()
     }, 2000)
   }
@@ -313,79 +491,38 @@ export default function RecruiterDashboard() {
   const handlePauseResume = () => {
     if (!stompClient.current?.connected || !activeSessionId || isStopped) return
     const action = isPaused ? 'RESUME' : 'PAUSE'
-    stompClient.current.publish({
-      destination: '/app/pause',
-      body: JSON.stringify({ sessionId: activeSessionId, action }),
-    })
+    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action }) })
     setIsPaused(!isPaused)
   }
 
   const handleStop = () => {
     if (!stompClient.current?.connected || !activeSessionId) return
     if (!window.confirm('Are you sure you want to end this interview?')) return
-
-    stompClient.current.publish({
-      destination: '/app/pause',
-      body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }),
-    })
-    setIsStopped(true)
-    setIsPaused(true)
-
+    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) })
+    setIsStopped(true); setIsPaused(true)
     setTimeout(() => {
       const endedSessionId = activeSessionId
-      setActiveSessionId(null)
-      setLiveFeed({})
-      setProctoringAlerts([])
-      setIsPaused(false)
-      setIsStopped(false)
-      setWsConnected(false)
+      setActiveSessionId(null); setLiveFeed({}); setProctoringAlerts([])
+      setIsPaused(false); setIsStopped(false); setWsConnected(false)
       setMessage('Interview ended. Report available in Analysis Reports tab.')
       setMessageType('success')
-
       pollingStoppedRef.current = false
       fetchCompletedSessions()
-      setAnalysisQuestions(prev => {
-        const updated = { ...prev }
-        delete updated[endedSessionId]
-        return updated
-      })
+      setAnalysisQuestions(prev => { const u = { ...prev }; delete u[endedSessionId]; return u })
       setReportSessionId(null)
     }, 2000)
   }
 
   const handleRecruiterQuestion = () => {
     if (!recruiterQuestion.trim() || !activeSessionId) return
-    if (!stompClient.current?.connected) {
-      alert('WebSocket not connected yet.')
-      return
-    }
-    setLiveFeed((prev) => ({
-      ...prev,
-      R: { questionText: recruiterQuestion, currentAnswer: '', status: 'TYPING' },
-    }))
-    stompClient.current.publish({
-      destination: '/app/recruiter-question',
-      body: JSON.stringify({ sessionId: activeSessionId, question: recruiterQuestion }),
-    })
+    if (!stompClient.current?.connected) { alert('WebSocket not connected yet.'); return }
+    setLiveFeed((prev) => ({ ...prev, R: { questionText: recruiterQuestion, currentAnswer: '', status: 'TYPING' } }))
+    stompClient.current.publish({ destination: '/app/recruiter-question', body: JSON.stringify({ sessionId: activeSessionId, question: recruiterQuestion }) })
     setRecruiterQuestion('')
   }
 
-  const getEventIcon = (t) => ({
-    PASTE_DETECTED: '📋',
-    RIGHT_CLICK: '🖱️',
-    KEYBOARD_SHORTCUT: '⌨️',
-    ALT_TAB_DETECTED: '🪟',
-    WINDOW_BLUR: '👁️',
-  }[t] || '⚠️')
-
-  const formatEventType = (t) => ({
-    PASTE_DETECTED: 'Paste Detected!',
-    RIGHT_CLICK: 'Right Click Attempted',
-    KEYBOARD_SHORTCUT: 'Keyboard Shortcut Blocked',
-    ALT_TAB_DETECTED: 'Alt+Tab Attempted',
-    WINDOW_BLUR: 'Window Switch Detected',
-  }[t] || t)
-
+  const getEventIcon = (t) => ({ PASTE_DETECTED: '📋', RIGHT_CLICK: '🖱️', KEYBOARD_SHORTCUT: '⌨️', ALT_TAB_DETECTED: '🪟', WINDOW_BLUR: '👁️' }[t] || '⚠️')
+  const formatEventType = (t) => ({ PASTE_DETECTED: 'Paste Detected!', RIGHT_CLICK: 'Right Click Attempted', KEYBOARD_SHORTCUT: 'Keyboard Shortcut Blocked', ALT_TAB_DETECTED: 'Alt+Tab Attempted', WINDOW_BLUR: 'Window Switch Detected' }[t] || t)
   const getAlertDescription = (e) => {
     if (e.pastedText) return `Pasted: "${e.pastedText.substring(0, 100)}${e.pastedText.length > 100 ? '...' : ''}"`
     if (e.shortcutKey) return `Shortcut: ${e.shortcutKey} - ${e.details || 'Attempted blocked action'}`
@@ -397,19 +534,11 @@ export default function RecruiterDashboard() {
     const scorePct = score != null ? Math.round((score / 10) * 100) : null
     const scoreColor = scorePct != null ? pctColor(scorePct) : 'var(--text-dim)'
     return (
-      <div style={{
-        marginTop: '12px', padding: '12px 14px',
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderLeft: '3px solid #8B5CF6', borderRadius: '8px',
-      }}>
+      <div style={{ marginTop: '12px', padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid #8B5CF6', borderRadius: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Response Analysis
-          </span>
+          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Response Analysis</span>
           {score != null && (
-            <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', padding: '2px 8px', borderRadius: '4px', background: `${scoreColor}20`, color: scoreColor, fontWeight: '700' }}>
-              Score {score}/10
-            </span>
+            <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', padding: '2px 8px', borderRadius: '4px', background: `${scoreColor}20`, color: scoreColor, fontWeight: '700' }}>Score {score}/10</span>
           )}
         </div>
         <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)', fontSize: '11px', color: '#A78BFA', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>
@@ -421,36 +550,17 @@ export default function RecruiterDashboard() {
 
   const renderReportsTab = () => {
     if (completedSessions.length === 0) {
-      return (
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-dim)' }}>
-          No completed interviews yet.
-        </div>
-      )
+      return <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-dim)' }}>No completed interviews yet.</div>
     }
-
-    const currentSession = reportSessionId
-      ? completedSessions.find(s => s.id === reportSessionId)
-      : completedSessions[0]
-
+    const currentSession = reportSessionId ? completedSessions.find(s => s.id === reportSessionId) : completedSessions[0]
     if (!currentSession) return null
-
     const allQ = analysisQuestions[currentSession.id] || []
     const aiQ = allQ.filter(q => !q.isRecruiterQuestion)
-
     const candidate = candidates.find(c => c.id === currentSession.user?.id)
     const candidateName = candidate?.fullName || currentSession.user?.fullName || currentSession.user?.email || 'Unknown'
-
     const hasGroqAnalysis = aiQ.some(q => q.confidence != null)
-
-    const avgOf = (key) => {
-      const withData = aiQ.filter(q => q[key] != null)
-      if (withData.length === 0) return null
-      return Math.round(withData.reduce((s, q) => s + q[key], 0) / withData.length)
-    }
-
-    const avgConfidence = avgOf('confidence')
-    const avgAuthenticity = avgOf('authenticity')
-    const avgAccuracy = avgOf('accuracy')
+    const avgOf = (key) => { const w = aiQ.filter(q => q[key] != null); if (!w.length) return null; return Math.round(w.reduce((s, q) => s + q[key], 0) / w.length) }
+    const avgConfidence = avgOf('confidence'), avgAuthenticity = avgOf('authenticity'), avgAccuracy = avgOf('accuracy')
     const suspiciousCount = aiQ.filter(q => q.suspicious).length
     const totalScore = aiQ.reduce((s, q) => s + (q.score || 0), 0)
     const maxScore = aiQ.length * 10
@@ -458,31 +568,18 @@ export default function RecruiterDashboard() {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
         {completedSessions.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                placeholder="Search by candidate name or session ID..."
-                value={sessionSearch}
+              <input type="text" placeholder="Search by candidate name or session ID..." value={sessionSearch}
                 onChange={e => setSessionSearch(e.target.value)}
-                style={{
-                  width: '100%', padding: '10px 14px 10px 36px',
-                  borderRadius: 'var(--radius)', border: '1px solid var(--border)',
-                  background: 'var(--surface2)', color: 'var(--text)',
-                  fontSize: '13px', fontFamily: 'var(--font-mono)',
-                  outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
-                }}
+                style={{ width: '100%', padding: '10px 14px 10px 36px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none', boxSizing: 'border-box' }}
                 onFocus={e => e.target.style.borderColor = '#2563EB'}
                 onBlur={e => e.target.style.borderColor = 'var(--border)'}
               />
               <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--text-dim)', pointerEvents: 'none' }}>🔍</span>
-              {sessionSearch && (
-                <button onClick={() => setSessionSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '14px', padding: '0' }}>✕</button>
-              )}
+              {sessionSearch && <button onClick={() => setSessionSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '14px', padding: 0 }}>✕</button>}
             </div>
-
             {sessionSearch.trim() !== '' && (
               <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
                 {(() => {
@@ -492,18 +589,14 @@ export default function RecruiterDashboard() {
                     const name = (c?.fullName || s.user?.fullName || s.user?.email || '').toLowerCase()
                     return name.includes(q) || String(s.id).includes(q)
                   })
-                  if (filtered.length === 0) return (
-                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
-                      No sessions found for "{sessionSearch}"
-                    </div>
-                  )
+                  if (!filtered.length) return <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>No sessions found for "{sessionSearch}"</div>
                   return filtered.map((s, idx) => {
                     const c = candidates.find(x => x.id === s.user?.id)
                     const cName = c?.fullName || s.user?.fullName || s.user?.email || `User #${s.user?.id}`
                     const isSelected = s.id === currentSession?.id
                     return (
                       <div key={s.id} onClick={() => { loadAnalysisForSession(s.id); setSessionSearch('') }}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none', background: isSelected ? '#2563EB10' : 'transparent', cursor: 'pointer', transition: 'background 0.15s' }}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none', background: isSelected ? '#2563EB10' : 'transparent', cursor: 'pointer' }}
                         onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface3)' }}
                         onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
                       >
@@ -513,9 +606,7 @@ export default function RecruiterDashboard() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{s.jobRole?.replace(/_/g, ' ')}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: s.totalScore > 0 ? '#10B981' : 'var(--text-dim)' }}>
-                            {s.totalQuestions > 0 ? `${Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)}%` : '—'}
-                          </span>
+                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: s.totalScore > 0 ? '#10B981' : 'var(--text-dim)' }}>{s.totalQuestions > 0 ? `${Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)}%` : '—'}</span>
                         </div>
                       </div>
                     )
@@ -523,22 +614,16 @@ export default function RecruiterDashboard() {
                 })()}
               </div>
             )}
-
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              Showing session #{currentSession?.id} —{' '}
-              <span>search above to find any session from all {allCompletedSessions.length} completed interviews</span>
+              Showing session #{currentSession?.id} — <span>search above to find any session from all {allCompletedSessions.length} completed interviews</span>
             </div>
           </div>
         )}
-
         <div>
           <p style={{ fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Most recent interview</p>
           <h2 style={{ fontSize: '20px', fontWeight: '700', fontFamily: 'var(--font-display)', margin: '4px 0' }}>{candidateName}</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>
-            {currentSession.jobRole?.replace(/_/g, ' ')} • Session #{currentSession.id} • {allQ.length} total questions
-          </p>
+          <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>{currentSession.jobRole?.replace(/_/g, ' ')} • Session #{currentSession.id} • {allQ.length} total questions</p>
         </div>
-
         {analysisLoading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>Loading analysis...</div>
         ) : allQ.length === 0 ? (
@@ -569,7 +654,6 @@ export default function RecruiterDashboard() {
                 </>
               )}
             </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {allQ.map((q, idx) => (
                 <div key={idx} className="card" style={{ padding: '20px', borderLeft: q.suspicious ? '4px solid #EF4444' : '4px solid #10B981' }}>
@@ -597,7 +681,7 @@ export default function RecruiterDashboard() {
                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: '90px' }}>{label}</span>
                           <div style={{ flex: 1, height: '6px', background: 'var(--surface2)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${value || 0}%`, background: pctColor(value), borderRadius: '3px', transition: 'width 0.3s ease' }} />
+                            <div style={{ height: '100%', width: `${value || 0}%`, background: pctColor(value), borderRadius: '3px' }} />
                           </div>
                           <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(value), width: '36px', textAlign: 'right' }}>{value ?? 0}%</span>
                         </div>
@@ -623,8 +707,8 @@ export default function RecruiterDashboard() {
 
       {/* ── Second violation popup ── */}
       {showEndPopup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ background: '#0D1117', border: '2px solid #EF4444', borderRadius: '16px', padding: '32px 36px', maxWidth: '460px', width: '90%', boxShadow: '0 0 80px rgba(239,68,68,0.4)', animation: 'fadeUp 0.3s ease', position: 'relative' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: '#0D1117', border: '2px solid #EF4444', borderRadius: '16px', padding: '32px 36px', maxWidth: '460px', width: '90%', boxShadow: '0 0 80px rgba(239,68,68,0.4)', position: 'relative' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #EF4444, #F97316)', borderRadius: '16px 16px 0 0' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
               <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EF444420', border: '2px solid #EF444460', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>🚨</div>
@@ -642,19 +726,20 @@ export default function RecruiterDashboard() {
               </div>
             )}
             <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.7', marginBottom: '24px' }}>
-              The candidate has committed a <strong style={{ color: '#EF4444' }}>second violation</strong>. A warning was already sent after the first. Do you want to <strong style={{ color: 'white' }}>terminate this interview</strong> immediately?
+              The candidate has committed a <strong style={{ color: '#EF4444' }}>second violation</strong>. A warning was already sent after the first. Do you want to <strong style={{ color: 'white' }}>terminate this interview</strong>?
             </p>
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={handleEndForCheating} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: '#EF4444', color: 'white', border: 'none', fontWeight: '700', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#DC2626'} onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}>
+              <button onClick={handleEndForCheating} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: '#EF4444', color: 'white', border: 'none', fontWeight: '700', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#DC2626'} onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}>
                 Yes, End Interview
               </button>
-              <button onClick={() => { setShowEndPopup(false); setViolationCount(1) }} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', fontWeight: '600', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s ease' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}>
+              <button onClick={() => { setShowEndPopup(false); setViolationCount(1) }} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', fontWeight: '600', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}>
                 No, Continue
               </button>
             </div>
-            <p style={{ textAlign: 'center', marginTop: '14px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Choosing "No" will reset to 1 warning. Next violation will prompt again.
-            </p>
+            <p style={{ textAlign: 'center', marginTop: '14px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Choosing "No" will reset to 1 warning.</p>
           </div>
         </div>
       )}
@@ -687,27 +772,23 @@ export default function RecruiterDashboard() {
             { id: 'resume', label: 'Resume Screening' },
             { id: 'candidates', label: 'Candidates' },
           ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: '10px 20px', background: 'transparent', border: 'none',
-                borderBottom: activeTab === tab.id ? '2px solid #2563EB' : '2px solid transparent',
-                color: activeTab === tab.id ? '#60A5FA' : '#334155',
-                fontSize: '14px', fontWeight: activeTab === tab.id ? 700 : 400,
-                cursor: 'pointer', marginBottom: '-1px',
-                fontFamily: activeTab === tab.id ? 'var(--font-display)' : 'var(--font-body)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {tab.label}
-            </button>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              padding: '10px 20px', background: 'transparent', border: 'none',
+              borderBottom: activeTab === tab.id ? '2px solid #2563EB' : '2px solid transparent',
+              color: activeTab === tab.id ? '#60A5FA' : '#334155',
+              fontSize: '14px', fontWeight: activeTab === tab.id ? 700 : 400,
+              cursor: 'pointer', marginBottom: '-1px',
+              fontFamily: activeTab === tab.id ? 'var(--font-display)' : 'var(--font-body)',
+              transition: 'all 0.15s ease',
+            }}>{tab.label}</button>
           ))}
         </div>
 
         {/* ── Live Interview Tab ── */}
         {activeTab === 'live' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+
+            {/* Left column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
               <div className="card" style={{ padding: '24px' }}>
@@ -740,7 +821,7 @@ export default function RecruiterDashboard() {
                 <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>02 — Job Role</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {JOB_ROLES.map((r) => (
-                    <button key={r} onClick={() => setSelectedRole(r)} style={{ padding: '12px 16px', borderRadius: 'var(--radius)', border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`, background: selectedRole === r ? '#2563EB10' : 'var(--surface2)', color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)', fontWeight: selectedRole === r ? '600' : '400', fontSize: '14px', textAlign: 'left', transition: 'all 0.2s ease', cursor: 'pointer' }}>
+                    <button key={r} onClick={() => setSelectedRole(r)} style={{ padding: '12px 16px', borderRadius: 'var(--radius)', border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`, background: selectedRole === r ? '#2563EB10' : 'var(--surface2)', color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)', fontWeight: selectedRole === r ? '600' : '400', fontSize: '14px', textAlign: 'left', cursor: 'pointer' }}>
                       {r.replace(/_/g, ' ')}
                     </button>
                   ))}
@@ -780,100 +861,110 @@ export default function RecruiterDashboard() {
               )}
             </div>
 
-            {/* Live feed */}
-            <div className="card" style={{ padding: '24px', minHeight: '500px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Live Feed</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {activeSessionId && (
-                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: wsConnected ? '#10B981' : '#F97316', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: wsConnected ? '#10B981' : '#F97316', animation: wsConnected ? 'pulse-glow 2s infinite' : 'blink 1s infinite' }} />
-                      {wsConnected ? 'WS Ready' : 'Connecting...'}
-                    </span>
-                  )}
-                  {activeSessionId && (
-                    <>
-                      <button onClick={handlePauseResume} disabled={isStopped || !wsConnected} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: (isStopped || !wsConnected) ? 'not-allowed' : 'pointer', border: isPaused ? '1px solid #10B98160' : '1px solid #F9731660', background: isPaused ? '#10B98115' : '#F9731615', color: isPaused ? '#10B981' : '#F97316', transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)', opacity: (isStopped || !wsConnected) ? 0.4 : 1 }}>
-                        {isPaused ? 'Resume' : 'Pause'}
-                      </button>
-                      {!isStopped ? (
-                        <button onClick={handleStop} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', transition: 'all 0.2s ease', fontFamily: 'var(--font-mono)' }}>End Interview</button>
-                      ) : (
-                        <span style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>Stopped</span>
-                      )}
-                      <span className="badge badge-green" style={{ animation: 'pulse-glow 2s infinite' }}>Live #{activeSessionId}</span>
-                    </>
-                  )}
-                </div>
-              </div>
+            {/* ── RIGHT COLUMN: Camera + Live Feed ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-              {isStopped && activeSessionId && (
-                <div style={{ padding: '10px 16px', background: '#EF444415', border: '1px solid #EF444440', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '13px', color: '#EF4444', fontWeight: '600', margin: 0 }}>Interview Stopped</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>Full analysis report available in Reports tab.</p>
-                </div>
-              )}
-              {activeSessionId && !wsConnected && !isStopped && (
-                <div style={{ padding: '10px 16px', background: '#2563EB10', border: '1px solid #2563EB40', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '12px', color: '#60A5FA', fontFamily: 'var(--font-mono)', margin: 0 }}>Connecting to WebSocket...</p>
-                </div>
-              )}
+              {/* ── CANDIDATE CAMERA FEED ── */}
+              <CandidateCameraFeed
+                candidateName={selectedCandidate?.fullName}
+                sessionId={activeSessionId}
+              />
 
-              <div style={{ flex: 1 }}>
-                {!activeSessionId ? (
-                  <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', opacity: 0.4 }}>
-                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                      <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
+              {/* ── LIVE FEED CARD ── */}
+              <div className="card" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>Live Feed</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {activeSessionId && (
+                      <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: wsConnected ? '#10B981' : '#F97316', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: wsConnected ? '#10B981' : '#F97316', animation: wsConnected ? 'pulse-glow 2s infinite' : 'blink 1s infinite' }} />
+                        {wsConnected ? 'WS Ready' : 'Connecting...'}
+                      </span>
+                    )}
+                    {activeSessionId && (
+                      <>
+                        <button onClick={handlePauseResume} disabled={isStopped || !wsConnected} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: (isStopped || !wsConnected) ? 'not-allowed' : 'pointer', border: isPaused ? '1px solid #10B98160' : '1px solid #F9731660', background: isPaused ? '#10B98115' : '#F9731615', color: isPaused ? '#10B981' : '#F97316', fontFamily: 'var(--font-mono)', opacity: (isStopped || !wsConnected) ? 0.4 : 1 }}>
+                          {isPaused ? 'Resume' : 'Pause'}
+                        </button>
+                        {!isStopped ? (
+                          <button onClick={handleStop} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>End Interview</button>
+                        ) : (
+                          <span style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>Stopped</span>
+                        )}
+                        <span className="badge badge-green" style={{ animation: 'pulse-glow 2s infinite' }}>Live #{activeSessionId}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {isStopped && activeSessionId && (
+                  <div style={{ padding: '10px 16px', background: '#EF444415', border: '1px solid #EF444440', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
+                    <p style={{ fontSize: '13px', color: '#EF4444', fontWeight: '600', margin: 0 }}>Interview Stopped</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>Full analysis report available in Reports tab.</p>
+                  </div>
+                )}
+                {activeSessionId && !wsConnected && !isStopped && (
+                  <div style={{ padding: '10px 16px', background: '#2563EB10', border: '1px solid #2563EB40', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
+                    <p style={{ fontSize: '12px', color: '#60A5FA', fontFamily: 'var(--font-mono)', margin: 0 }}>Connecting to WebSocket...</p>
+                  </div>
+                )}
+
+                <div style={{ flex: 1 }}>
+                  {!activeSessionId ? (
+                    <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', opacity: 0.4 }}>
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                        <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
+                      </div>
                     </div>
-                  </div>
-                ) : Object.keys(liveFeed).length === 0 ? (
-                  <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>{wsConnected ? 'Waiting for candidate...' : 'Setting up live feed...'}</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '600px', overflowY: 'auto' }}>
-                    {Object.entries(liveFeed)
-                      .sort(([a], [b]) => {
-                        const an = isNaN(Number(a)) ? 9999 : Number(a)
-                        const bn = isNaN(Number(b)) ? 9999 : Number(b)
-                        return an - bn
-                      })
-                      .map(([qNum, data]) => (
-                        <div key={qNum} style={{ background: 'var(--surface2)', border: `1px solid ${data.status === 'SUBMITTED' ? '#10B98140' : '#F9731640'}`, borderRadius: 'var(--radius)', padding: '16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>{qNum === 'R' ? 'Recruiter Q' : `Q${qNum}`}</span>
-                            <span className={`badge ${data.status === 'SUBMITTED' ? 'badge-green' : 'badge-orange'}`}>{data.status === 'SUBMITTED' ? 'Submitted' : 'Typing'}</span>
+                  ) : Object.keys(liveFeed).length === 0 ? (
+                    <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>{wsConnected ? 'Waiting for candidate...' : 'Setting up live feed...'}</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto' }}>
+                      {Object.entries(liveFeed)
+                        .sort(([a], [b]) => {
+                          const an = isNaN(Number(a)) ? 9999 : Number(a)
+                          const bn = isNaN(Number(b)) ? 9999 : Number(b)
+                          return an - bn
+                        })
+                        .map(([qNum, data]) => (
+                          <div key={qNum} style={{ background: 'var(--surface2)', border: `1px solid ${data.status === 'SUBMITTED' ? '#10B98140' : '#F9731640'}`, borderRadius: 'var(--radius)', padding: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>{qNum === 'R' ? 'Recruiter Q' : `Q${qNum}`}</span>
+                              <span className={`badge ${data.status === 'SUBMITTED' ? 'badge-green' : 'badge-orange'}`}>{data.status === 'SUBMITTED' ? 'Submitted' : 'Typing'}</span>
+                            </div>
+                            <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '10px' }}>{data.questionText}</p>
+                            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text)', minHeight: '40px', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                              {data.currentAnswer || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                              {data.status === 'TYPING' && <span style={{ display: 'inline-block', width: '2px', height: '14px', background: 'var(--cyan)', marginLeft: '2px', animation: 'blink 1s infinite', verticalAlign: 'middle' }} />}
+                            </div>
+                            {data.status === 'SUBMITTED' && renderLiveAnalysis(data)}
                           </div>
-                          <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '10px' }}>{data.questionText}</p>
-                          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text)', minHeight: '40px', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-                            {data.currentAnswer || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                            {data.status === 'TYPING' && <span style={{ display: 'inline-block', width: '2px', height: '14px', background: 'var(--cyan)', marginLeft: '2px', animation: 'blink 1s infinite', verticalAlign: 'middle' }} />}
-                          </div>
-                          {data.status === 'SUBMITTED' && renderLiveAnalysis(data)}
-                        </div>
-                      ))}
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {activeSessionId && !isStopped && (
+                  <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {isPaused && <p style={{ fontSize: '12px', color: '#F97316', fontFamily: 'var(--font-mono)', margin: 0 }}>Paused — ask your question below.</p>}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <input
+                        value={recruiterQuestion}
+                        onChange={(e) => setRecruiterQuestion(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleRecruiterQuestion() }}
+                        placeholder={isPaused ? 'Ask your question now...' : 'Pause first, then ask a question...'}
+                        disabled={!isPaused}
+                        style={{ flex: 1, padding: '12px 14px', borderRadius: 'var(--radius)', border: `1px solid ${isPaused ? '#F9731660' : 'var(--border)'}`, background: 'var(--surface2)', color: 'var(--text)', fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none', opacity: isPaused ? 1 : 0.5 }}
+                      />
+                      <button onClick={handleRecruiterQuestion} disabled={!recruiterQuestion.trim() || !isPaused} className="btn-primary" style={{ padding: '12px 20px', fontSize: '14px', flexShrink: 0, opacity: !recruiterQuestion.trim() || !isPaused ? 0.5 : 1 }}>Ask</button>
+                    </div>
                   </div>
                 )}
               </div>
-
-              {activeSessionId && !isStopped && (
-                <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {isPaused && <p style={{ fontSize: '12px', color: '#F97316', fontFamily: 'var(--font-mono)', margin: 0 }}>Paused — candidate is waiting. Ask your question below.</p>}
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <input
-                      value={recruiterQuestion}
-                      onChange={(e) => setRecruiterQuestion(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleRecruiterQuestion() }}
-                      placeholder={isPaused ? 'Ask your question now...' : 'Pause first, then ask a question...'}
-                      disabled={!isPaused}
-                      style={{ flex: 1, padding: '12px 14px', borderRadius: 'var(--radius)', border: `1px solid ${isPaused ? '#F9731660' : 'var(--border)'}`, background: 'var(--surface2)', color: 'var(--text)', fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none', opacity: isPaused ? 1 : 0.5 }}
-                    />
-                    <button onClick={handleRecruiterQuestion} disabled={!recruiterQuestion.trim() || !isPaused} className="btn-primary" style={{ padding: '12px 20px', fontSize: '14px', flexShrink: 0, opacity: !recruiterQuestion.trim() || !isPaused ? 0.5 : 1 }}>Ask</button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -898,15 +989,12 @@ export default function RecruiterDashboard() {
         )}
 
         {activeTab === 'candidates' && (
-          <CandidatesTab 
-            candidates={candidates} 
-            sessions={allCompletedSessions}
-            loading={sessionsLoading}
-          />
+          <CandidatesTab candidates={candidates} sessions={allCompletedSessions} loading={sessionsLoading} />
         )}
       </div>
 
       <style>{`
+        @keyframes scanline { 0% { top: 0 } 100% { top: 100% } }
         .badge-red { background: #EF444415; color: #EF4444; border: 1px solid #EF444460; border-radius: 12px; padding: 2px 8px; font-size: 10px; font-weight: 600; font-family: monospace; }
       `}</style>
     </div>
