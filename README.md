@@ -236,14 +236,6 @@ cp .env.example .env
 npm install
 npm run dev
 ```
-
-### Environment Variables
-
-**Backend `application.properties`**
-```properties
-groq.api.key=YOUR_GROQ_API_KEY
-```
-
 **Frontend `.env`**
 ```env
 VITE_GROQ_API_KEY=your_groq_key
