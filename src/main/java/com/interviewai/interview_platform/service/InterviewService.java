@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -22,20 +24,17 @@ public class InterviewService {
     private final QuestionBankRepository questionBankRepository;
     private final QuestionRepository questionRepository;
 
-    // Recruiter calls this — creates session FOR a specific candidate
     public InterviewSession startSession(User candidate, String jobRole) {
-
         InterviewSession session = new InterviewSession();
         session.setUser(candidate);
         session.setJobRole(jobRole);
         session.setStatus(InterviewSession.Status.IN_PROGRESS);
         session.setStartedAt(LocalDateTime.now());
-        session.setTotalQuestions(0); // no fixed limit — updated on Stop with actual count
+        session.setTotalQuestions(0);
         session.setTotalScore(0);
 
         InterviewSession saved = sessionRepository.save(session);
 
-        // Load 50 questions — recruiter decides when to stop
         List<QuestionBank> bankQuestions =
                 questionBankRepository.findRandomByJobRole(jobRole, 50);
 
@@ -54,19 +53,35 @@ public class InterviewService {
         return saved;
     }
 
-    // Get one session by ID
     public InterviewSession getSession(Long id) {
         return sessionRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
     }
 
-    // Candidate — get their own sessions
     public List<InterviewSession> getUserSessions(User user) {
         return sessionRepository.findByUserOrderByStartedAtDesc(user);
     }
 
-    // Recruiter — get ALL sessions
-    public List<InterviewSession> getAllSessions() {
-        return sessionRepository.findAll();
+    // Optimized — uses native query, no EAGER loading
+    public List<Map<String, Object>> getAllSessions() {
+        List<Object[]> rows = sessionRepository.findSessionSummaries();
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id",              row[0]);
+            map.put("jobRole",         row[1]);
+            map.put("totalScore",      row[2]);
+            map.put("totalQuestions",  row[3]);
+            map.put("status",          row[4]);
+            map.put("startedAt",       row[5]);
+            map.put("completedAt",     row[6]);
+            map.put("userName",        row[7]);
+            map.put("userId",          row[8]);
+            map.put("actualQuestions", row[9]);
+            result.add(map);
+        }
+
+        return result;
     }
 }
