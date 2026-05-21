@@ -225,13 +225,13 @@ const STYLES = `
     font-size: 9px; color: var(--text-muted);
     letter-spacing: 1px; margin-top: 3px; text-transform: uppercase;
   }
-  .rs-score-info { flex: 1; position: relative; z-index: 1; }
+.rs-score-info { flex: 1; position: relative; z-index: 1; display: flex; align-items: center; }
   .rs-grade-badge {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 16px; border-radius: var(--radius-badge);
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px; font-weight: 700; letter-spacing: 1px;
-    text-transform: uppercase; color: #fff; margin-bottom: 14px;
+    text-transform: uppercase; color: #fff; margin-bottom: 0;
     background: var(--score-color);
     box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 20px var(--score-color-faint);
     animation: rsFadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.5s both;
@@ -486,20 +486,7 @@ export default function Results() {
               <span className="rs-grade-dot" />
               {grade}
             </div>
-            <div className="rs-score-stats">
-              <div className="rs-stat-item">
-                <span className="rs-stat-val">{aiAnswered.length}</span>
-                <span className="rs-stat-lbl">Questions</span>
-              </div>
-              <div className="rs-stat-item">
-                <span className="rs-stat-val">{totalScore}</span>
-                <span className="rs-stat-lbl">Points earned</span>
-              </div>
-              <div className="rs-stat-item">
-                <span className="rs-stat-val">{maxScore}</span>
-                <span className="rs-stat-lbl">Max points</span>
-              </div>
-            </div>
+<div className="rs-score-stats"></div>
           </div>
         </div>
 
