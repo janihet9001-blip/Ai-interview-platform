@@ -147,8 +147,6 @@ export default function RecruiterDashboard() {
   const [activeTab, setActiveTab] = useState('live')
   const [proctoringAlerts, setProctoringAlerts] = useState([])
   const [rsCandidate, setRsCandidate] = useState(null)
-  const [rsResumeFile, setRsResumeFile] = useState(null)
-  const [rsResumeText, setRsResumeText] = useState('')
   const [rsMessages, setRsMessages] = useState([])
   const [rsGenerated, setRsGenerated] = useState(false)
   const rsConversationRef = useRef([])
@@ -184,10 +182,10 @@ export default function RecruiterDashboard() {
         }
         const completed = (sessionsRes.data || [])
           .map(parseSession)
-          .filter(s => s.status === 'COMPLETED')
+.filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS')
           .sort((a, b) => b.id - a.id)
-        setAllCompletedSessions(completed)
-        setCompletedSessions(completed.slice(0, 10))
+setAllCompletedSessions(completed)
+setCompletedSessions(completed)
       } catch (err) {
         if (err?.response?.status === 403) pollingStoppedRef.current = true
       } finally {
@@ -204,7 +202,7 @@ export default function RecruiterDashboard() {
       .then(res => {
         const completed = (res.data || [])
           .map(parseSession)
-          .filter(s => s.status === 'COMPLETED')
+.filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS')
           .sort((a, b) => b.id - a.id)
         setAllCompletedSessions(completed)
         setCompletedSessions(completed.slice(0, 10))
@@ -261,11 +259,13 @@ const allParsed = (res.data || [])
 
   useEffect(() => { reportAutoLoadedRef.current = false }, [completedSessions])
 
-  useEffect(() => {
+useEffect(() => {
     if (!activeSessionId) return
     setWsConnected(false)
+
+    const timer = setTimeout(() => {
     const client = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
       reconnectDelay: 2000,
       onConnect: () => {
         setWsConnected(true)
@@ -303,9 +303,11 @@ const allParsed = (res.data || [])
       onDisconnect: () => setWsConnected(false),
       onStompError: () => setWsConnected(false),
     })
-    client.activate()
+client.activate()
     stompClient.current = client
-    return () => { client.deactivate(); setWsConnected(false) }
+    }, 1000)
+
+    return () => { clearTimeout(timer); stompClient.current?.deactivate(); setWsConnected(false) }
   }, [activeSessionId])
 
   const handleStart = () => {
@@ -779,7 +781,7 @@ const allParsed = (res.data || [])
         </div>
         <div style={{ display: activeTab === 'resume' ? 'block' : 'none' }}>
           {mountedTabs.current.has('resume') && (
-            <ResumeScreeningTab candidates={candidates} selectedCandidate={rsCandidate} setSelectedCandidate={setRsCandidate} resumeFile={rsResumeFile} setResumeFile={setRsResumeFile} resumeText={rsResumeText} setResumeText={setRsResumeText} messages={rsMessages} setMessages={setRsMessages} generated={rsGenerated} setGenerated={setRsGenerated} conversationRef={rsConversationRef} />
+           <ResumeScreeningTab candidates={candidates} selectedCandidate={rsCandidate} setSelectedCandidate={setRsCandidate} messages={rsMessages} setMessages={setRsMessages} generated={rsGenerated} setGenerated={setRsGenerated} conversationRef={rsConversationRef} />
           )}
         </div>
         <div style={{ display: activeTab === 'candidates' ? 'block' : 'none' }}>

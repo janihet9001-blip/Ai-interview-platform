@@ -1,15 +1,12 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import mammoth from 'mammoth'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
 export default function ResumeScreeningTab({
   candidates,
   selectedCandidate, setSelectedCandidate,
-  resumeFile, setResumeFile,
-  resumeText, setResumeText,
   messages, setMessages,
   generated, setGenerated,
   conversationRef,
@@ -17,68 +14,52 @@ export default function ResumeScreeningTab({
   const chatEndRef = useRef(null)
   const [input, setInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
-  const [fileError, setFileError] = useState('')
-  const [dragOver, setDragOver] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [resumeLoading, setResumeLoading] = useState(false)
+  const [noResume, setNoResume] = useState(false)
+  const [resumeText, setResumeText] = useState('')
 
-  const extractTextFromFile = async (file) => {
-    const name = file.name.toLowerCase()
-
-    if (name.endsWith('.txt')) {
-      return await file.text()
-    }
-
-    if (name.endsWith('.pdf')) {
-      const buffer = await file.arrayBuffer()
-      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-      let text = ''
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i)
-        const content = await page.getTextContent()
-        text += content.items.map(item => item.str).join(' ') + '\n'
-      }
-      return text
-    }
-
-    if (name.endsWith('.docx')) {
-      const buffer = await file.arrayBuffer()
-      const result = await mammoth.extractRawText({ arrayBuffer: buffer })
-      return result.value
-    }
-
-    throw new Error('Only PDF, DOCX, and TXT files are supported.')
-  }
-
-  const handleFileSelect = async (file) => {
-    if (!file) return
-
-    setFileError('')
-    setResumeFile(file)
+  // Fetch resume from DB when candidate selected
+  useEffect(() => {
+    if (!selectedCandidate) { setPdfUrl(null); setNoResume(false); setResumeText(''); return }
+    setPdfUrl(null)
+    setNoResume(false)
     setResumeText('')
     setMessages([])
     setGenerated(false)
     conversationRef.current = []
+    setResumeLoading(true)
+    const token = sessionStorage.getItem('token')
+    fetch(`${import.meta.env.VITE_API_URL}/users/${selectedCandidate.id}/resume`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) { setNoResume(true); setResumeLoading(false); return null }
+        return res.blob()
+      })
+      .then(async blob => {
+        if (!blob) return
+        const url = URL.createObjectURL(blob)
+        setPdfUrl(url)
 
-    try {
-      const text = await extractTextFromFile(file)
-
-      if (!text.trim()) {
-        setFileError('Could not read text from this resume. Try another file.')
-        return
-      }
-
-      setResumeText(text)
-    } catch (err) {
-      setFileError(err.message || 'Failed to read resume.')
-    }
-  }
+        // Extract text from PDF for AI
+        const buffer = await blob.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+        let text = ''
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const content = await page.getTextContent()
+          text += content.items.map(item => item.str).join(' ') + '\n'
+        }
+        setResumeText(text)
+        setResumeLoading(false)
+      })
+      .catch(() => { setNoResume(true); setResumeLoading(false) })
+  }, [selectedCandidate])
 
   const callGroq = async (msgs) => {
     const apiKey = import.meta.env.VITE_GROQ_API_KEY
-
-    if (!apiKey) {
-      throw new Error('Missing VITE_GROQ_API_KEY in .env')
-    }
-
+    if (!apiKey) throw new Error('Missing VITE_GROQ_API_KEY in .env')
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -91,22 +72,15 @@ export default function ResumeScreeningTab({
         max_tokens: 1200,
       }),
     })
-
     const data = await res.json()
-
-    if (!res.ok) {
-      throw new Error(data.error?.message || 'Groq request failed.')
-    }
-
+    if (!res.ok) throw new Error(data.error?.message || 'Groq request failed.')
     return data.choices?.[0]?.message?.content || 'No response received.'
   }
 
   const generateQuestions = async () => {
     if (!resumeText.trim()) return
-
     setAiLoading(true)
     setGenerated(true)
-
     const history = [
       {
         role: 'system',
@@ -117,21 +91,14 @@ export default function ResumeScreeningTab({
         content: `Here is the candidate's resume:\n\n${resumeText}\n\nGenerate a structured list of interview questions.`,
       },
     ]
-
     conversationRef.current = history
-
     try {
       const reply = await callGroq(history)
       const assistantMsg = { role: 'assistant', content: reply }
       conversationRef.current = [...history, assistantMsg]
       setMessages([assistantMsg])
     } catch (err) {
-      setMessages([
-        {
-          role: 'assistant',
-          content: err.message || 'Failed to generate questions. Check your Groq API key and try again.',
-        },
-      ])
+      setMessages([{ role: 'assistant', content: err.message || 'Failed to generate questions.' }])
     } finally {
       setAiLoading(false)
     }
@@ -139,29 +106,20 @@ export default function ResumeScreeningTab({
 
   const sendMessage = async () => {
     if (!input.trim() || aiLoading) return
-
     const userText = input.trim()
     setInput('')
-
     const newUserMsg = { role: 'user', content: userText }
     const updatedHistory = [...conversationRef.current, newUserMsg]
     conversationRef.current = updatedHistory
     setMessages(prev => [...prev, { role: 'user', content: userText }])
     setAiLoading(true)
-
     try {
       const reply = await callGroq(updatedHistory)
       const assistantMsg = { role: 'assistant', content: reply }
       conversationRef.current = [...updatedHistory, assistantMsg]
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (err) {
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: err.message || 'Something went wrong. Try again.',
-        },
-      ])
+      setMessages(prev => [...prev, { role: 'assistant', content: err.message || 'Something went wrong.' }])
     } finally {
       setAiLoading(false)
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
@@ -183,7 +141,6 @@ export default function ResumeScreeningTab({
           }}>
             Candidate
           </p>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {candidates.length === 0 ? (
               <p style={{ color: 'var(--text-dim)', fontSize: '13px' }}>No candidates found.</p>
@@ -191,15 +148,7 @@ export default function ResumeScreeningTab({
               candidates.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => {
-                    setSelectedCandidate(c)
-                    setResumeFile(null)
-                    setResumeText('')
-                    setMessages([])
-                    setGenerated(false)
-                    setFileError('')
-                    conversationRef.current = []
-                  }}
+                  onClick={() => setSelectedCandidate(c)}
                   onMouseEnter={e => {
                     if (selectedCandidate?.id !== c.id) {
                       e.currentTarget.style.border = '1px solid #2563EB60'
@@ -230,53 +179,34 @@ export default function ResumeScreeningTab({
                     gap: '10px',
                   }}
                 >
-                  {/* Avatar */}
                   <div style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
+                    width: '34px', height: '34px', borderRadius: '50%',
                     background: selectedCandidate?.id === c.id
                       ? 'linear-gradient(135deg, #2563EB, #06B6D4)'
                       : 'linear-gradient(135deg, #1E2D45, #2563EB40)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    color: 'white',
-                    flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: '700', color: 'white', flexShrink: 0,
                   }}>
                     {c.fullName?.charAt(0).toUpperCase()}
                   </div>
-
-                  {/* Info */}
                   <div>
                     <div style={{
-                      fontWeight: '700',
-                      fontSize: '13px',
+                      fontWeight: '700', fontSize: '13px',
                       color: selectedCandidate?.id === c.id ? '#60A5FA' : 'var(--text)',
                     }}>
                       {c.fullName}
                     </div>
                     <div style={{
-                      fontSize: '11px',
-                      color: 'var(--text-dim)',
-                      fontFamily: 'var(--font-mono)',
-                      marginTop: '2px',
+                      fontSize: '11px', color: 'var(--text-dim)',
+                      fontFamily: 'var(--font-mono)', marginTop: '2px',
                     }}>
                       {c.email}
                     </div>
                   </div>
-
-                  {/* Selected dot */}
                   {selectedCandidate?.id === c.id && (
                     <div style={{
-                      marginLeft: 'auto',
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: '#2563EB',
-                      boxShadow: '0 0 8px #2563EB80',
+                      marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%',
+                      background: '#2563EB', boxShadow: '0 0 8px #2563EB80',
                     }} />
                   )}
                 </button>
@@ -285,7 +215,7 @@ export default function ResumeScreeningTab({
           </div>
         </div>
 
-        {/* Resume upload card */}
+        {/* Resume status card */}
         {selectedCandidate && (
           <div className="card" style={{ padding: '20px' }}>
             <p style={{
@@ -295,91 +225,27 @@ export default function ResumeScreeningTab({
             }}>
               Resume
             </p>
-
-            {/* Drag-and-drop zone */}
-            <div
-              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]) }}
-              onClick={() => document.getElementById('rs-file-input').click()}
-              style={{
-                border: `2px dashed ${dragOver ? '#2563EB' : resumeFile ? '#10B98160' : 'var(--border)'}`,
-                borderRadius: '10px',
-                padding: '16px',
-                textAlign: 'center',
-                cursor: 'pointer',
-                background: dragOver ? '#2563EB08' : 'var(--surface2)',
-                transition: 'all 0.2s ease',
-                marginBottom: resumeFile ? '12px' : 0,
-              }}
-            >
-              <input
-                id="rs-file-input"
-                type="file"
-                accept=".pdf,.docx,.txt"
-                style={{ display: 'none' }}
-                onChange={e => handleFileSelect(e.target.files[0])}
-              />
-              {resumeFile ? (
-                <>
-                  <div style={{ fontSize: '20px', marginBottom: '4px' }}>📄</div>
-                  <p style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text)', margin: '0 0 2px', wordBreak: 'break-all' }}>{resumeFile.name}</p>
-                  <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0 }}>click to change</p>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: '20px', marginBottom: '4px' }}>⬆️</div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 2px' }}>Drop resume here</p>
-                  <p style={{ fontSize: '11px', color: 'var(--text-faint)', margin: 0 }}>PDF, TXT, DOCX</p>
-                </>
-              )}
-            </div>
-
-            {fileError && (
-              <p style={{ fontSize: '12px', color: '#F87171', marginTop: '8px', marginBottom: '0' }}>{fileError}</p>
+            {resumeLoading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '14px', height: '14px', borderRadius: '50%',
+                  border: '2px solid var(--border)', borderTopColor: 'var(--accent)',
+                  animation: 'spin 0.8s linear infinite', flexShrink: 0,
+                }} />
+                <p style={{ color: 'var(--text-dim)', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                  Loading...
+                </p>
+              </div>
             )}
-
-            {resumeFile && !generated && (
-              <button
-                onClick={generateQuestions}
-                disabled={aiLoading}
-                style={{
-                  width: '100%', padding: '10px',
-                  borderRadius: '10px', border: 'none',
-                  background: aiLoading ? 'var(--surface2)' : '#2563EB',
-                  color: aiLoading ? 'var(--text-dim)' : 'white',
-                  fontSize: '13px', fontWeight: '600',
-                  cursor: aiLoading ? 'not-allowed' : 'pointer',
-                  fontFamily: 'var(--font-display)',
-                  transition: 'all 0.2s ease',
-                  marginTop: '12px',
-                }}
-              >
-                {aiLoading ? 'Generating...' : 'Generate Questions'}
-              </button>
+            {!resumeLoading && noResume && (
+              <p style={{ color: 'var(--text-muted)', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                No resume uploaded.
+              </p>
             )}
-
-            {resumeFile && generated && (
-              <button
-                onClick={() => {
-                  setResumeFile(null)
-                  setResumeText('')
-                  setMessages([])
-                  setGenerated(false)
-                  setFileError('')
-                  conversationRef.current = []
-                }}
-                style={{
-                  width: '100%', padding: '10px',
-                  borderRadius: '10px', border: '1px solid var(--border)',
-                  background: 'var(--surface2)', color: 'var(--text-dim)',
-                  fontSize: '13px', fontWeight: '600',
-                  cursor: 'pointer', fontFamily: 'var(--font-display)',
-                  marginTop: '12px',
-                }}
-              >
-                Upload New Resume
-              </button>
+            {!resumeLoading && pdfUrl && (
+              <p style={{ color: 'var(--green)', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                ✓ Resume loaded
+              </p>
             )}
           </div>
         )}
@@ -392,32 +258,82 @@ export default function ResumeScreeningTab({
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
             <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Select a candidate to begin</p>
           </div>
-        ) : !resumeFile ? (
+
+        ) : resumeLoading ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
+            <div style={{
+              width: '28px', height: '28px', borderRadius: '50%',
+              border: '2px solid var(--border)', borderTopColor: 'var(--accent)',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+          </div>
+
+        ) : noResume ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '8px' }}>
             <div style={{ fontSize: '32px' }}>📋</div>
-            <p style={{ color: 'var(--text-dim)', fontSize: '14px', margin: 0 }}>Upload {selectedCandidate.fullName}'s resume to generate questions</p>
-            <p style={{ color: 'var(--text-faint)', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>PDF, TXT, or DOCX</p>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', margin: 0 }}>
+              {selectedCandidate.fullName} hasn't uploaded a resume yet.
+            </p>
           </div>
+
         ) : !generated ? (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '12px' }}>
-            <div style={{ fontSize: '32px' }}>📄</div>
-            <p style={{ color: 'var(--text)', fontSize: '14px', fontWeight: '600', margin: 0 }}>{resumeFile.name}</p>
-            <p style={{ color: 'var(--text-dim)', fontSize: '13px', margin: 0 }}>Ready — click Generate Questions</p>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <iframe
+              src={pdfUrl}
+              width="100%"
+              style={{ border: 'none', borderRadius: 'var(--radius)', flex: 1, minHeight: '420px' }}
+              title="Candidate Resume"
+            />
+            <button
+              onClick={generateQuestions}
+              disabled={aiLoading || !resumeText}
+              style={{
+                padding: '10px', borderRadius: '10px', border: 'none',
+                background: aiLoading || !resumeText ? 'var(--surface2)' : '#2563EB',
+                color: aiLoading || !resumeText ? 'var(--text-dim)' : 'white',
+                fontSize: '13px', fontWeight: '600',
+                cursor: aiLoading || !resumeText ? 'not-allowed' : 'pointer',
+                fontFamily: 'var(--font-display)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {aiLoading ? 'Generating...' : 'Generate Questions'}
+            </button>
           </div>
+
         ) : (
           <>
             {/* Chat header */}
-            <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{
+              marginBottom: '16px', paddingBottom: '16px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
               <div>
                 <p style={{ fontWeight: '700', fontSize: '15px', margin: 0 }}>{selectedCandidate.fullName}</p>
-                <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '2px 0 0' }}>{resumeFile.name}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '2px 0 0' }}>
+                  {selectedCandidate.email}
+                </p>
               </div>
-              <span style={{
-                padding: '4px 10px', borderRadius: '6px',
-                background: '#10B98115', border: '1px solid #10B98140',
-                fontSize: '11px', fontWeight: '600', color: '#10B981',
-                fontFamily: 'var(--font-mono)',
-              }}>AI Ready</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  padding: '4px 10px', borderRadius: '6px',
+                  background: '#10B98115', border: '1px solid #10B98140',
+                  fontSize: '11px', fontWeight: '600', color: '#10B981',
+                  fontFamily: 'var(--font-mono)',
+                }}>AI Ready</span>
+                <button
+                  onClick={() => { setGenerated(false); setMessages([]); conversationRef.current = [] }}
+                  style={{
+                    padding: '4px 10px', borderRadius: '6px',
+                    background: 'var(--surface2)', border: '1px solid var(--border)',
+                    fontSize: '11px', color: 'var(--text-dim)',
+                    cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  ← Resume
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -440,7 +356,6 @@ export default function ResumeScreeningTab({
                   </div>
                 </div>
               ))}
-
               {aiLoading && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                   <div style={{

@@ -392,7 +392,8 @@ Respond ONLY with a raw JSON object:
         setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 2200)
 
         const client = new Client({
-          webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
+
           onConnect: () => {
 
             client.subscribe(`/topic/feedback/${sessionData.id}`, (message) => {

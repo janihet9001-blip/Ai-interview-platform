@@ -28,7 +28,7 @@ export default function WaitingRoom() {
   useEffect(() => {
     if (!user?.id) return
     const client = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
       onConnect: () => {
         client.subscribe(`/topic/session/${user.id}`, (msg) => {
           const data = JSON.parse(msg.body)
