@@ -15,18 +15,19 @@ public interface SessionRepository extends JpaRepository<InterviewSession, Long>
 
     // Optimized — no EAGER question loading, summary only
     @Query(value = """
-        SELECT s.id, s.job_role, s.total_score, s.total_questions,
-               s.status, s.started_at, s.completed_at,
-               u.full_name as user_name, u.id as user_id,
-               COUNT(CASE WHEN q.question_number != 999 THEN 1 END) as actual_questions
-        FROM interview_sessions s
-        JOIN users u ON s.user_id = u.id
-        LEFT JOIN questions q ON q.session_id = s.id
-        GROUP BY s.id, s.job_role, s.total_score, s.total_questions,
-                 s.status, s.started_at, s.completed_at,
-                 u.full_name, u.id
-        ORDER BY s.started_at DESC
-        LIMIT 20
-        """, nativeQuery = true)
+    SELECT s.id, s.job_role, s.total_score, s.total_questions,
+           s.status, s.started_at, s.completed_at,
+           u.full_name as user_name, u.id as user_id,
+           COUNT(CASE WHEN q.question_number != 999 THEN 1 END) as actual_questions
+    FROM interview_sessions s
+    JOIN users u ON s.user_id = u.id
+    LEFT JOIN questions q ON q.session_id = s.id
+    WHERE s.status = 'COMPLETED'
+    OR s.status = 'IN_PROGRESS'
+    GROUP BY s.id, s.job_role, s.total_score, s.total_questions,
+             s.status, s.started_at, s.completed_at,
+             u.full_name, u.id
+    ORDER BY s.started_at DESC
+    """, nativeQuery = true)
     List<Object[]> findSessionSummaries();
 }
