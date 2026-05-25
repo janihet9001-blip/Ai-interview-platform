@@ -1,609 +1,1365 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
 
 const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
-  .lp-page {
-    position: fixed !important;
-    inset: 0 !important;
+  :root {
+    --bg-deep: #0A0A1A;
+    --bg-surface: #0F1028;
+    --accent-400: #A78BFA;
+    --accent-500: #7C3AED;
+    --accent-600: #6D28D9;
+    --accent-glow: #C4B5FD;
+    --cyan-400: #22D3EE;
+    --cyan-500: #06B6D4;
+    --text-100: #F8FAFC;
+    --text-200: #E2E8F0;
+    --text-300: #CBD5E1;
+    --text-400: #94A3B8;
+    --text-500: #64748B;
+    --border-100: rgba(167, 139, 250, 0.1);
+    --border-200: rgba(167, 139, 250, 0.18);
+    --border-300: rgba(167, 139, 250, 0.3);
+    --glass-bg: rgba(15, 16, 40, 0.65);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --radius-xl: 24px;
+  }
+
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-deep);
+    overflow: hidden;
+  }
+
+  /* ============ MAIN VIEWPORT ============ */
+  .cosmic-viewport {
+    position: fixed;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--bg-deep);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     overflow: hidden;
-    background: #020816;
-    font-family: 'DM Sans', sans-serif;
+    isolation: isolate;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ============ NEBULA BACKGROUND ============ */
+  .nebula-layer {
+    position: absolute;
+    inset: -20%;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 50% at 15% 25%, rgba(124, 58, 237, 0.18) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 60% at 80% 65%, rgba(6, 182, 212, 0.13) 0%, transparent 55%),
+      radial-gradient(ellipse 45% 55% at 50% 45%, rgba(167, 139, 250, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 65% 45% at 35% 70%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+      radial-gradient(ellipse 55% 50% at 70% 20%, rgba(34, 211, 238, 0.07) 0%, transparent 55%);
+    animation: nebulaBreath 18s ease-in-out infinite;
+  }
+
+  @keyframes nebulaBreath {
+    0%, 100% { transform: scale(1) translate(0, 0); opacity: 0.8; }
+    25% { transform: scale(1.08) translate(2%, -1%); opacity: 1; }
+    50% { transform: scale(0.95) translate(-1%, 2%); opacity: 0.7; }
+    75% { transform: scale(1.05) translate(-2%, -2%); opacity: 0.9; }
+  }
+
+  /* ============ COSMIC GRID ============ */
+  .cosmic-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(167, 139, 250, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(167, 139, 250, 0.04) 1px, transparent 1px);
+    background-size: 70px 70px;
+    mask-image: radial-gradient(ellipse 75% 75% at 50% 50%, black 20%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 75% 75% at 50% 50%, black 20%, transparent 70%);
+  }
+
+  /* ============ STARFIELD CANVAS ============ */
+  .starfield-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ============ FLOATING ORBS ============ */
+  .cosmic-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  .orb-1 {
+    width: 450px;
+    height: 450px;
+    background: rgba(124, 58, 237, 0.15);
+    top: -15%;
+    left: -8%;
+    animation: orbDrift1 22s ease-in-out infinite;
+  }
+
+  .orb-2 {
+    width: 380px;
+    height: 380px;
+    background: rgba(6, 182, 212, 0.12);
+    bottom: -12%;
+    right: -5%;
+    animation: orbDrift2 26s ease-in-out infinite;
+  }
+
+  .orb-3 {
+    width: 320px;
+    height: 320px;
+    background: rgba(167, 139, 250, 0.1);
+    top: 50%;
+    left: 55%;
+    animation: orbDrift3 20s ease-in-out infinite;
+  }
+
+  .orb-4 {
+    width: 280px;
+    height: 280px;
+    background: rgba(34, 211, 238, 0.08);
+    top: 20%;
+    left: 60%;
+    animation: orbDrift1 24s ease-in-out infinite;
+    animation-delay: -8s;
+  }
+
+  @keyframes orbDrift1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(40px, -35px) scale(1.15); }
+    66% { transform: translate(-25px, 20px) scale(0.9); }
+  }
+
+  @keyframes orbDrift2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(-35px, -30px) scale(1.1); }
+    66% { transform: translate(30px, 25px) scale(0.92); }
+  }
+
+  @keyframes orbDrift3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(20px, -40px) scale(1.12); }
+  }
+
+  /* ============ ORBITAL RINGS ============ */
+  .ring-system {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    pointer-events: none;
     z-index: 0;
   }
-  .lp-vanta {
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    z-index: 0 !important;
+
+  .orbital-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: 50%;
+    border: 1px solid rgba(167, 139, 250, 0.08);
+    transform: translate(-50%, -50%);
+    animation: ringSpin linear infinite;
   }
-  .lp-particles {
-    position: absolute; inset: 0;
-    pointer-events: none; z-index: 1; overflow: hidden;
+
+  .ring-1 {
+    width: 450px;
+    height: 280px;
+    animation-duration: 28s;
+    border-color: rgba(167, 139, 250, 0.1);
   }
-  .lp-particle {
-    position: absolute; bottom: -10px; border-radius: 50%;
-    background: linear-gradient(135deg, #60a5fa, #06b6d4);
-    animation: lpRise linear infinite;
+
+  .ring-2 {
+    width: 650px;
+    height: 400px;
+    animation-duration: 38s;
+    animation-direction: reverse;
+    border-color: rgba(6, 182, 212, 0.07);
   }
-  @keyframes lpRise {
-    0%   { transform: translateY(0) scale(1);       opacity: 0; }
-    10%  { opacity: 1; }
-    90%  { opacity: 0.5; }
-    100% { transform: translateY(-100vh) scale(0.5); opacity: 0; }
+
+  .ring-3 {
+    width: 850px;
+    height: 520px;
+    animation-duration: 48s;
+    border-color: rgba(124, 58, 237, 0.06);
   }
-  .lp-rings {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none; z-index: 1;
+
+  .ring-dot {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    background: #A78BFA;
+    border-radius: 50%;
+    box-shadow: 0 0 12px #A78BFA, 0 0 25px rgba(167, 139, 250, 0.5);
   }
-  .lp-ring {
-    position: absolute; border-radius: 50%;
-    border: 1px solid rgba(37,99,235,.20);
-    width: 80px; height: 80px;
-    animation: lpRing 11s ease-out infinite;
+
+  .ring-1 .ring-dot { top: -3px; left: 50%; transform: translateX(-50%); }
+  .ring-2 .ring-dot { bottom: -3px; left: 30%; }
+  .ring-3 .ring-dot { top: 40%; right: -3px; }
+
+  @keyframes ringSpin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
   }
-  @keyframes lpRing {
-    0%   { width: 80px;  height: 80px;  opacity: 0.7; }
-    100% { width: 900px; height: 900px; opacity: 0;   }
+
+  /* ============ VIGNETTE OVERLAY ============ */
+  .vignette {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse at center,
+      transparent 30%,
+      rgba(10, 10, 26, 0.3) 50%,
+      rgba(10, 10, 26, 0.65) 75%,
+      rgba(10, 10, 26, 0.9) 100%
+    );
   }
-  .lp-top-badge {
-    position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 18px;
-    background: rgba(4,6,24,.78);
-    border: 1px solid rgba(96,165,250,.28); border-radius: 50px;
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    letter-spacing: 2px; color: rgba(120,190,255,.9);
-    white-space: nowrap; backdrop-filter: blur(12px); z-index: 10;
+
+  /* ============ SCANLINES ============ */
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.03;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.5) 2px,
+      rgba(255, 255, 255, 0.5) 3px
+    );
   }
-  .lp-badge-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #22c55e; box-shadow: 0 0 8px #22c55e;
-    flex-shrink: 0; animation: lpDot 1.8s ease-in-out infinite;
+
+  /* ============ SHOOTING STARS (CSS) ============ */
+  .shooting-star {
+    position: absolute;
+    width: 2px;
+    height: 60px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.9), transparent);
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    animation: shootStar linear infinite;
   }
-  @keyframes lpDot {
-    0%,100% { opacity: 1; transform: scale(1);   }
-    50%      { opacity: .3; transform: scale(1.3); }
+
+  .shoot-1 {
+    top: 8%;
+    left: 15%;
+    transform: rotate(-35deg);
+    animation-duration: 4s;
+    animation-delay: 0s;
   }
-  .lp-chip {
-    position: absolute; display: flex; flex-direction: column;
-    align-items: center; padding: 10px 16px;
-    background: rgba(4,8,36,.72);
-    border: 1px solid rgba(80,160,255,.22); border-radius: 14px;
-    backdrop-filter: blur(12px); z-index: 10;
-    animation: lpChip 5s ease-in-out infinite;
+
+  .shoot-2 {
+    top: 12%;
+    left: 55%;
+    transform: rotate(-28deg);
+    animation-duration: 5s;
+    animation-delay: 2.5s;
   }
-  .lp-chip-v {
-    font-family: 'Syne', sans-serif; font-size: 18px;
-    font-weight: 800; color: #fff; line-height: 1;
+
+  .shoot-3 {
+    top: 5%;
+    left: 75%;
+    transform: rotate(-40deg);
+    animation-duration: 4.5s;
+    animation-delay: 5s;
   }
-  .lp-chip-l {
-    font-size: 9.5px; color: rgba(96,165,250,.82); font-weight: 600;
-    letter-spacing: .5px; margin-top: 3px;
-    font-family: 'JetBrains Mono', monospace;
+
+  @keyframes shootStar {
+    0% { opacity: 0; transform: rotate(-35deg) translateX(0) translateY(0); }
+    3% { opacity: 0.8; }
+    8% { opacity: 0; transform: rotate(-35deg) translateX(-250px) translateY(250px); }
+    100% { opacity: 0; transform: rotate(-35deg) translateX(-250px) translateY(250px); }
   }
-  .lp-chip-a { top: 18%; left: 5%;  animation-delay: 0s;   }
-  .lp-chip-b { top: 18%; right: 5%; animation-delay: 1.6s; }
-  .lp-chip-c { bottom: 22%; right: 5%; animation-delay: 3.2s; }
-  @keyframes lpChip {
-    0%,100% { transform: translateY(0);   }
-    50%      { transform: translateY(-8px); }
+
+  /* ============ COSMIC DUST ============ */
+  .dust-particle {
+    position: absolute;
+    border-radius: 50%;
+    background: white;
+    z-index: 0;
+    pointer-events: none;
+    animation: dustRise linear infinite;
   }
-  .lp-card {
-    position: relative; z-index: 20;
-    width: 420px; max-width: 94vw;
-    max-height: 96vh; overflow-y: auto; scrollbar-width: none;
-    background: rgba(6,10,36,.75);
-    border: 1px solid rgba(80,140,255,.26); border-radius: 26px;
+
+  @keyframes dustRise {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.7; }
+    90% { opacity: 0.2; }
+    100% { transform: translateY(-100vh) translateX(var(--drift, 30px)); opacity: 0; }
+  }
+
+  /* ============ LOGIN CONTAINER ============ */
+  .login-stage {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 440px;
+    padding: 20px;
+    animation: stageEntry 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes stageEntry {
+    0% { opacity: 0; transform: translateY(40px) scale(0.94); filter: blur(8px); }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  }
+
+  /* ============ AUTH CARD ============ */
+  .auth-panel {
+    position: relative;
+    background: rgba(15, 16, 40, 0.6);
+    backdrop-filter: blur(50px) saturate(180%);
+    -webkit-backdrop-filter: blur(50px) saturate(180%);
+    border: 1px solid rgba(167, 139, 250, 0.12);
+    border-radius: var(--radius-xl);
     padding: 42px 38px 34px;
-    backdrop-filter: blur(30px) saturate(160%);
-    -webkit-backdrop-filter: blur(30px) saturate(160%);
     box-shadow:
-      0 0 0 1px rgba(80,160,255,.06),
-      0 8px 40px rgba(0,0,0,.7),
-      inset 0 0 80px rgba(37,99,235,.08),
-      0 32px 80px rgba(0,0,0,.4);
-    animation: lpCard .6s cubic-bezier(.22,1,.36,1) both;
-    transition: border-color .3s, box-shadow .3s;
+      0 20px 60px rgba(0, 0, 0, 0.6),
+      0 0 50px rgba(124, 58, 237, 0.1),
+      0 0 80px rgba(6, 182, 212, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .lp-card::-webkit-scrollbar { display: none; }
-  .lp-card:hover {
-    border-color: rgba(96,165,250,.38);
-    box-shadow:
-      0 0 0 1px rgba(80,160,255,.1),
-      0 8px 60px rgba(0,0,0,.75),
-      inset 0 0 100px rgba(37,99,235,.1),
-      0 0 60px rgba(59,130,246,.1);
-  }
-  @keyframes lpCard {
-    from { opacity:0; transform:translateY(28px) scale(.97); }
-    to   { opacity:1; transform:translateY(0)    scale(1);   }
-  }
-  .lp-card::before {
-    content:''; position:absolute; inset:0; border-radius:26px; padding:1px;
-    background: linear-gradient(125deg,
-      rgba(37,99,235,.4), rgba(96,165,250,.8),
-      rgba(139,92,246,.5), rgba(147,197,253,.85), rgba(37,99,235,.4));
+
+  .auth-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      rgba(167, 139, 250, 0.4),
+      transparent 35%,
+      rgba(6, 182, 212, 0.2) 50%,
+      transparent 65%,
+      rgba(124, 58, 237, 0.3)
+    );
     background-size: 300% 300%;
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor; mask-composite: exclude;
-    opacity:0; transition: opacity .45s;
-    animation: lpBorder 8s ease infinite; pointer-events:none;
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.5;
+    animation: borderShimmer 6s ease infinite;
   }
-  .lp-card:hover::before { opacity:1; }
-  @keyframes lpBorder {
-    0%   { background-position: 0% 50%;   }
-    50%  { background-position: 100% 50%; }
-    100% { background-position: 0% 50%;   }
+
+  .auth-panel:hover {
+    border-color: rgba(167, 139, 250, 0.22);
+    box-shadow:
+      0 24px 70px rgba(0, 0, 0, 0.7),
+      0 0 70px rgba(124, 58, 237, 0.2),
+      0 0 100px rgba(6, 182, 212, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
   }
-  .lp-shimmer {
-    position:absolute; top:0; left:12%; right:12%; height:1px;
-    background: linear-gradient(90deg, transparent, rgba(120,180,255,.75), rgba(180,130,255,.6), transparent);
-    border-radius:50%; pointer-events:none;
-    animation: lpShimmer 4s ease-in-out infinite;
+
+  .auth-panel:hover::before {
+    opacity: 0.8;
   }
-  @keyframes lpShimmer { 0%,100%{opacity:.7} 50%{opacity:1} }
-  .lp-brand {
-    display:flex; align-items:center; gap:12px;
-    margin-bottom:28px; justify-content:center;
+
+  @keyframes borderShimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
-  .lp-logo-box {
-    width:42px; height:42px;
-    background: linear-gradient(135deg,#2563eb,#06b6d4);
-    border-radius:12px; display:flex; align-items:center; justify-content:center;
-    box-shadow: 0 0 20px rgba(37,99,235,.6); flex-shrink:0;
-    position:relative; overflow:hidden;
+
+  /* Card inner glow */
+  .card-inner-glow {
+    position: absolute;
+    top: -60%;
+    left: -60%;
+    width: 220%;
+    height: 220%;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(124, 58, 237, 0.06) 0%,
+      transparent 60%
+    );
+    pointer-events: none;
+    z-index: 0;
+    animation: innerGlow 15s linear infinite;
   }
-  .lp-logo-box::after {
-    content:''; position:absolute; top:-50%; left:-60%;
-    width:180%; height:180%;
-    background: linear-gradient(115deg, rgba(255,255,255,.22) 0%, transparent 70%);
-    transform: rotate(25deg);
-    animation: lpLogoShine 5s ease-in-out infinite;
+
+  @keyframes innerGlow {
+    to { transform: rotate(360deg); }
   }
-  @keyframes lpLogoShine {
-    0%   { transform: translateX(-100%) rotate(25deg); }
-    75%  { transform: translateX(80%)   rotate(25deg); }
-    100% { transform: translateX(180%)  rotate(25deg); }
+
+  .panel-content {
+    position: relative;
+    z-index: 1;
   }
-  .lp-brand-name {
-    font-family:'Syne',sans-serif; font-size:20px;
-    font-weight:800; color:#fff; letter-spacing:-.3px;
+
+  /* ============ BRAND ============ */
+  .brand-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 34px;
   }
-  .lp-brand-name span { color:#60a5fa; }
-  .lp-h1 {
-    font-family:'Syne',sans-serif; font-size:27px; font-weight:800;
-    color:#fff; text-align:center; letter-spacing:-.5px; margin-bottom:6px;
+
+  .logo-emblem {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 18px;
+    position: relative;
   }
-  .lp-sub {
-    font-size:13px; color:rgba(148,163,184,.72); text-align:left;
-    margin-bottom:28px; padding-left:14px;
-    border-left:2.5px solid rgba(37,99,235,.6); line-height:1.5;
+
+  .emblem-core {
+    width: 54px;
+    height: 54px;
+    background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 50%, #4C1D95 100%);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow:
+      0 0 35px rgba(124, 58, 237, 0.6),
+      0 0 70px rgba(124, 58, 237, 0.3),
+      0 0 100px rgba(167, 139, 250, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: pointer;
   }
-  .lp-field { margin-bottom:16px; }
-  .lp-label {
-    display:flex; align-items:center; gap:7px;
-    font-size:11px; font-weight:600; color:rgba(148,163,184,.65);
-    letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;
-    font-family:'JetBrains Mono',monospace; transition:color .22s;
+
+  .emblem-core:hover {
+    transform: scale(1.1) rotate(8deg);
+    box-shadow:
+      0 0 50px rgba(124, 58, 237, 0.8),
+      0 0 100px rgba(124, 58, 237, 0.4),
+      0 0 150px rgba(167, 139, 250, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
-  .lp-label svg { color:rgba(96,165,250,.6); flex-shrink:0; transition:color .22s; }
-  .lp-field-active .lp-label { color:rgba(96,165,250,.9); }
-  .lp-field-active .lp-label svg { color:#60a5fa; }
-  .lp-iw { position:relative; display:flex; align-items:center; }
-  .lp-input {
-    width:100%; padding:13px 16px;
-    background:rgba(255,255,255,.04);
-    border:1px solid rgba(80,140,255,.18); border-radius:11px;
-    color:#e2e8f0; font-family:'DM Sans',sans-serif; font-size:14px;
-    outline:none; transition:border-color .22s, box-shadow .22s, background .22s;
+
+  /* Orbiting dot around logo */
+  .logo-orbit {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 75px;
+    height: 75px;
+    border: 1.5px solid rgba(167, 139, 250, 0.25);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: logoOrbit 10s linear infinite;
+    pointer-events: none;
   }
-  .lp-input::placeholder { color:rgba(100,116,139,.5); }
-  .lp-input:hover:not(:focus) {
-    border-color:rgba(80,140,255,.32); background:rgba(255,255,255,.06);
+
+  .logo-orbit::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: #A78BFA;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 20px #A78BFA, 0 0 40px rgba(167, 139, 250, 0.6);
   }
-  .lp-input:focus {
-    border-color:rgba(96,165,250,.6);
-    box-shadow:0 0 0 3px rgba(37,99,235,.15), 0 0 20px rgba(37,99,235,.08);
-    background:rgba(255,255,255,.07);
+
+  @keyframes logoOrbit {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
   }
-  .lp-input-p { padding-right:44px; }
-  .lp-eye {
-    position:absolute; right:12px; background:none; border:none;
-    cursor:pointer; color:rgba(100,116,139,.65);
-    display:flex; align-items:center; padding:4px;
-    border-radius:6px; transition:color .15s, background .15s;
+
+  .brand-title {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: #F8FAFC;
+    letter-spacing: -0.5px;
+    margin-bottom: 5px;
+    text-shadow: 0 0 30px rgba(167, 139, 250, 0.3);
   }
-  .lp-eye:hover { color:#60a5fa; background:rgba(96,165,250,.1); }
-  .lp-row {
-    display:flex; justify-content:space-between; align-items:center;
-    margin-bottom:20px;
+
+  .brand-accent {
+    background: linear-gradient(135deg, #A78BFA 0%, #22D3EE 60%, #C4B5FD 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-  .lp-remember {
-    display:flex; align-items:center; gap:8px;
-    font-size:13px; color:rgba(148,163,184,.72);
-    cursor:pointer; user-select:none; transition:color .2s;
+
+  .brand-subtitle {
+    font-size: 13px;
+    color: #94A3B8;
+    font-weight: 400;
+    letter-spacing: 0.3px;
   }
-  .lp-remember:hover { color:rgba(148,163,184,1); }
-  .lp-chk {
-    width:16px; height:16px;
-    border:1.5px solid rgba(80,140,255,.35); border-radius:5px;
-    background:rgba(255,255,255,.04);
-    display:flex; align-items:center; justify-content:center;
-    flex-shrink:0; transition:all .2s;
+
+  /* ============ FORM ============ */
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
-  .lp-chk-on {
-    background:#2563eb; border-color:#2563eb;
-    box-shadow:0 0 10px rgba(37,99,235,.5);
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-  .lp-forgot {
-    background:none; border:none; font-family:'DM Sans',sans-serif;
-    font-size:13px; font-weight:600; color:#60a5fa;
-    cursor:pointer; transition:color .2s; padding:0;
+
+  .field-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748B;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    transition: color 0.3s ease;
   }
-  .lp-forgot:hover { color:#93c5fd; }
-  .lp-error {
-    display:flex; align-items:center; gap:8px;
-    padding:11px 14px; background:rgba(239,68,68,.10);
-    border:1px solid rgba(239,68,68,.28); border-radius:10px;
-    color:#f87171; font-size:13px; margin-bottom:16px;
-    animation:lpErr .3s ease;
+
+  .field-group:focus-within .field-label {
+    color: #A78BFA;
+    text-shadow: 0 0 10px rgba(167, 139, 250, 0.3);
   }
-  .lp-error svg { flex-shrink:0; }
-  @keyframes lpErr {
-    from { opacity:0; transform:translateY(-6px); }
-    to   { opacity:1; transform:translateY(0);    }
+
+  .label-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
   }
-  .lp-btn {
-    width:100%; padding:14px;
-    background:linear-gradient(135deg,#2563eb,#1d4ed8);
-    border:none; border-radius:11px; color:#fff;
-    font-family:'DM Sans',sans-serif; font-size:14.5px; font-weight:700;
-    letter-spacing:.2px; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; gap:10px;
-    position:relative; overflow:hidden;
-    box-shadow:0 4px 20px rgba(37,99,235,.5);
-    transition:transform .15s, box-shadow .15s;
+
+  .field-group:focus-within .label-icon {
+    opacity: 1;
   }
-  .lp-btn::before {
-    content:''; position:absolute; inset:0;
-    background:linear-gradient(180deg,rgba(255,255,255,.1) 0%,transparent 55%);
-    border-radius:inherit; pointer-events:none;
+
+  .input-container {
+    position: relative;
   }
-  .lp-btn::after {
-    content:''; position:absolute; inset:0;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);
-    transform:translateX(-100%); transition:transform .5s ease;
+
+  .form-input {
+    width: 100%;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.12);
+    border-radius: var(--radius-md);
+    color: #F8FAFC;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+    transition: all 0.3s ease;
+    letter-spacing: 0.2px;
   }
-  .lp-btn:hover::after { transform:translateX(100%); }
-  .lp-btn:hover:not(:disabled) {
-    transform:translateY(-2px);
-    box-shadow:0 8px 32px rgba(37,99,235,.65), 0 0 50px rgba(59,130,246,.15);
+
+  .form-input::placeholder {
+    color: #64748B;
+    font-weight: 400;
   }
-  .lp-btn:active:not(:disabled) { transform:translateY(0); }
-  .lp-btn:disabled { opacity:.55; cursor:not-allowed; transform:none; }
-  .lp-spinner {
-    width:16px; height:16px;
-    border:2.5px solid rgba(255,255,255,.3); border-top-color:#fff;
-    border-radius:50%; animation:lpSpin .65s linear infinite; flex-shrink:0;
+
+  .form-input:hover {
+    border-color: rgba(167, 139, 250, 0.22);
+    background: rgba(255, 255, 255, 0.05);
   }
-  @keyframes lpSpin { to { transform:rotate(360deg); } }
-  .lp-div {
-    position:relative; text-align:center; margin:20px 0;
+
+  .form-input:focus {
+    border-color: #7C3AED;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      0 0 0 3px rgba(124, 58, 237, 0.12),
+      0 0 25px rgba(124, 58, 237, 0.1),
+      inset 0 0 15px rgba(124, 58, 237, 0.03);
   }
-  .lp-div::before,.lp-div::after {
-    content:''; position:absolute; top:50%; height:1px;
-    width:calc(50% - 20px); background:rgba(80,140,255,.16);
+
+  .input-has-icon {
+    padding-right: 44px;
   }
-  .lp-div::before{left:0} .lp-div::after{right:0}
-  .lp-div span {
-    font-size:11px; color:rgba(100,116,139,.6);
-    padding:0 10px; font-family:'JetBrains Mono',monospace;
+
+  .password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #64748B;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
   }
-  .lp-reg {
-    text-align:center; font-size:13px;
-    color:rgba(148,163,184,.65); margin-bottom:20px;
+
+  .password-toggle:hover {
+    color: #A78BFA;
+    background: rgba(124, 58, 237, 0.1);
   }
-  .lp-reg a { color:#60a5fa; font-weight:700; text-decoration:none; transition:color .2s; }
-  .lp-reg a:hover { color:#93c5fd; }
-  .lp-trust {
-    display:flex; justify-content:center; gap:8px;
-    flex-wrap:wrap; margin-bottom:14px;
+
+  /* ============ ACTIONS ROW ============ */
+  .actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 2px;
   }
-  .lp-tbadge {
-    display:flex; align-items:center; gap:5px;
-    padding:4px 10px;
-    background:rgba(37,99,235,.10);
-    border:1px solid rgba(37,99,235,.22); border-radius:50px;
-    font-size:10.5px; color:rgba(96,165,250,.85);
-    font-family:'JetBrains Mono',monospace; letter-spacing:.3px;
-    transition:background .2s, border-color .2s;
+
+  .remember-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
   }
-  .lp-tbadge:hover {
-    background:rgba(37,99,235,.18); border-color:rgba(37,99,235,.4);
+
+  .custom-checkbox {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(167, 139, 250, 0.22);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.02);
   }
-  .lp-footer {
-    text-align:center; font-size:11.5px; color:rgba(100,116,139,.5);
+
+  .custom-checkbox.checked {
+    background: #7C3AED;
+    border-color: #7C3AED;
+    box-shadow: 0 0 18px rgba(124, 58, 237, 0.4);
   }
-  .lp-footer span { color:rgba(96,165,250,.65); cursor:pointer; transition:color .2s; }
-  .lp-footer span:hover { color:#60a5fa; }
-  @media(max-width:500px){
-    .lp-card{width:92vw;padding:30px 20px 26px}
-    .lp-chip-a{top:10%;left:2%} .lp-chip-b{top:10%;right:2%} .lp-chip-c{display:none}
-    .lp-h1{font-size:22px}
+
+  .remember-label {
+    font-size: 13px;
+    color: #CBD5E1;
+    font-weight: 500;
+    transition: color 0.2s ease;
+  }
+
+  .remember-wrap:hover .remember-label {
+    color: #E2E8F0;
+  }
+
+  .forgot-btn {
+    background: none;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #A78BFA;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .forgot-btn:hover {
+    color: #C4B5FD;
+    background: rgba(124, 58, 237, 0.08);
+    text-shadow: 0 0 10px rgba(167, 139, 250, 0.3);
+  }
+
+  /* ============ ERROR ============ */
+  .error-block {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-left: 2px solid #EF4444;
+    border-radius: var(--radius-md);
+    color: #FCA5A5;
+    font-size: 13px;
+    font-weight: 500;
+    animation: errorIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes errorIn {
+    0% { opacity: 0; transform: translateX(-10px); }
+    100% { opacity: 1; transform: translateX(0); }
+  }
+
+  .error-icon-block {
+    flex-shrink: 0;
+  }
+
+  /* ============ SUBMIT ============ */
+  .submit-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    color: white;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    margin-top: 6px;
+  }
+
+  .submit-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .submit-btn::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    transition: left 0.7s ease;
+  }
+
+  .submit-btn:hover:not(:disabled) {
+    transform: translateY(-3px);
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+    box-shadow: 0 10px 35px rgba(124, 58, 237, 0.55), 0 0 60px rgba(167, 139, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  .submit-btn:hover:not(:disabled)::after {
+    left: 100%;
+  }
+
+  .submit-btn:active:not(:disabled) {
+    transform: translateY(-1px);
+    transition: all 0.1s ease;
+  }
+
+  .submit-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    filter: saturate(0.4);
+  }
+
+  .btn-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .btn-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: btnSpin 0.7s linear infinite;
+  }
+
+  @keyframes btnSpin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ============ DIVIDER ============ */
+  .divider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 24px 0;
+  }
+
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.15), transparent);
+  }
+
+  .divider-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #64748B;
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+
+  /* ============ REGISTER ============ */
+  .register-wrap {
+    text-align: center;
+    margin-bottom: 22px;
+  }
+
+  .register-prompt {
+    font-size: 14px;
+    color: #94A3B8;
+    font-weight: 400;
+  }
+
+  .register-link {
+    color: #A78BFA;
+    font-weight: 600;
+    text-decoration: none;
+    margin-left: 4px;
+    transition: all 0.2s ease;
+  }
+
+  .register-link:hover {
+    color: #C4B5FD;
+    text-shadow: 0 0 10px rgba(167, 139, 250, 0.3);
+  }
+
+  /* ============ TRUST BADGES ============ */
+  .trust-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .trust-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 15px;
+    background: rgba(124, 58, 237, 0.06);
+    border: 1px solid rgba(167, 139, 250, 0.1);
+    border-radius: 50px;
+    font-size: 11px;
+    color: #94A3B8;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    transition: all 0.25s ease;
+  }
+
+  .trust-pill:hover {
+    background: rgba(124, 58, 237, 0.12);
+    border-color: rgba(167, 139, 250, 0.22);
+    color: #CBD5E1;
+    box-shadow: 0 0 15px rgba(124, 58, 237, 0.15);
+  }
+
+  .pill-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #A78BFA;
+    box-shadow: 0 0 10px #A78BFA;
+    flex-shrink: 0;
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.5; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* ============ FOOTER ============ */
+  .legal-footer {
+    text-align: center;
+    font-size: 11px;
+    color: #64748B;
+    line-height: 1.7;
+  }
+
+  .legal-link {
+    color: #94A3B8;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    font-weight: 500;
+  }
+
+  .legal-link:hover {
+    color: #A78BFA;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 480px) {
+    .auth-panel {
+      padding: 32px 22px 28px;
+      border-radius: var(--radius-lg);
+    }
+    .brand-title {
+      font-size: 22px;
+    }
+    .login-stage {
+      padding: 16px;
+    }
+    .trust-row {
+      gap: 6px;
+    }
+    .trust-pill {
+      padding: 5px 10px;
+      font-size: 10px;
+    }
+    .orb-1, .orb-2, .orb-3, .orb-4 {
+      opacity: 0.5;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 `
 
-export default function Login() {
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [error,    setError]    = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [remember, setRemember] = useState(false)
-  const [showPass, setShowPass] = useState(false)
-  const [focused,  setFocused]  = useState('')
-  const { login } = useAuth()
-  const vantaRef    = useRef(null)
-  const vantaEffect = useRef(null)
-  const styleRef    = useRef(null)
+const useStarfieldCanvas = function(canvasRef) {
+  useEffect(function() {
+    var canvas = canvasRef.current
+    if (!canvas) return
 
-  /* inject CSS once */
-  useEffect(() => {
-    if (!document.getElementById('lp-styles')) {
-      const el = document.createElement('style')
-      el.id = 'lp-styles'
-      el.textContent = STYLES
-      document.head.appendChild(el)
-      styleRef.current = el
+    var ctx = canvas.getContext('2d')
+    var animationId
+    var stars = []
+    var shootingStars = []
+    var STAR_COUNT = 200
+    var SHOOTING_COUNT = 3
+
+    function resize() {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2)
+      var rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width * dpr
+      canvas.height = rect.height * dpr
+      canvas.style.width = rect.width + 'px'
+      canvas.style.height = rect.height + 'px'
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.scale(dpr, dpr)
     }
-    return () => { document.getElementById('lp-styles')?.remove() }
-  }, [])
 
-  useEffect(() => {
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('user')
-  }, [])
+    resize()
+    window.addEventListener('resize', resize)
 
-  /* Vanta Globe */
-  useEffect(() => {
-    const loadScript = (src) =>
-      new Promise((resolve) => {
-        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-        const s = document.createElement('script')
-        s.src = src
-        s.onload = resolve
-        document.head.appendChild(s)
-      })
+    function Star(w, h) {
+      this.w = w
+      this.h = h
+      this.x = Math.random() * w
+      this.y = Math.random() * h
+      this.size = Math.random() * 2.2 + 0.4
+      this.baseOpacity = Math.random() * 0.65 + 0.25
+      this.twinkleSpeed = Math.random() * 0.018 + 0.004
+      this.twinkleOffset = Math.random() * Math.PI * 2
+      this.driftX = (Math.random() - 0.5) * 0.15
+      this.driftY = (Math.random() - 0.5) * 0.1
+      var colors = ['#ffffff', '#A78BFA', '#C4B5FD', '#22D3EE', '#E0E7FF', '#DDD6FE']
+      this.color = colors[Math.floor(Math.random() * colors.length)]
+    }
 
-    const init = async () => {
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js')
-      await loadScript('https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js')
-      if (vantaRef.current && !vantaEffect.current && window.VANTA) {
-        vantaEffect.current = window.VANTA.GLOBE({
-          el: vantaRef.current,
-          mouseControls: true,
-          touchControls: true,
-          gyroControls: false,
-          minHeight: 200,
-          minWidth: 200,
-          scale: 1.0,
-          scaleMobile: 1.0,
-          color: 0x3b82f6,
-          color2: 0x60a5fa,
-          backgroundColor: 0x020816,
-          points: 14,
-          maxDistance: 22,
-          spacing: 18,
-        })
+    Star.prototype.draw = function(ctx, time) {
+      this.x += this.driftX
+      this.y += this.driftY
+      if (this.x < -10) this.x = this.w + 10
+      if (this.x > this.w + 10) this.x = -10
+      if (this.y < -10) this.y = this.h + 10
+      if (this.y > this.h + 10) this.y = -10
+
+      var twinkle = Math.sin(time * this.twinkleSpeed + this.twinkleOffset) * 0.35 + 0.65
+      var alpha = this.baseOpacity * twinkle
+
+      ctx.beginPath()
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
+      ctx.fillStyle = this.color
+      ctx.globalAlpha = alpha
+      ctx.fill()
+
+      if (this.size > 1.3) {
+        var glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 8)
+        glow.addColorStop(0, this.color)
+        glow.addColorStop(1, 'transparent')
+        ctx.fillStyle = glow
+        ctx.globalAlpha = alpha * 0.25
+        ctx.fill()
+      }
+      ctx.globalAlpha = 1
+    }
+
+    function ShootingStar(w, h) {
+      this.w = w
+      this.h = h
+      this.reset()
+    }
+
+    ShootingStar.prototype.reset = function() {
+      this.x = Math.random() * this.w * 0.6 + this.w * 0.2
+      this.y = Math.random() * this.h * 0.3
+      this.length = Math.random() * 70 + 40
+      this.speed = Math.random() * 7 + 5
+      this.opacity = 0
+      this.fadingIn = true
+      this.angle = Math.PI * 0.35 + (Math.random() - 0.5) * 0.3
+    }
+
+    ShootingStar.prototype.update = function() {
+      if (this.fadingIn) {
+        this.opacity += 0.025
+        if (this.opacity >= 0.9) this.fadingIn = false
+      } else {
+        this.opacity -= 0.008
+      }
+      this.x += Math.cos(this.angle) * this.speed
+      this.y += Math.sin(this.angle) * this.speed
+      if (this.opacity <= 0 || this.x > this.w + 100 || this.y > this.h + 100) {
+        this.reset()
+      }
+    }
+
+    ShootingStar.prototype.draw = function(ctx) {
+      if (this.opacity <= 0.01) return
+      var endX = this.x - Math.cos(this.angle) * this.length
+      var endY = this.y - Math.sin(this.angle) * this.length
+      var gradient = ctx.createLinearGradient(this.x, this.y, endX, endY)
+      gradient.addColorStop(0, 'rgba(255, 255, 255, ' + this.opacity + ')')
+      gradient.addColorStop(0.5, 'rgba(167, 139, 250, ' + (this.opacity * 0.5) + ')')
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+      ctx.beginPath()
+      ctx.moveTo(this.x, this.y)
+      ctx.lineTo(endX, endY)
+      ctx.strokeStyle = gradient
+      ctx.lineWidth = 1.5
+      ctx.globalAlpha = this.opacity
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    }
+
+    function init() {
+      var w = canvas.width / Math.min(window.devicePixelRatio || 1, 2)
+      var h = canvas.height / Math.min(window.devicePixelRatio || 1, 2)
+      stars = []
+      shootingStars = []
+      for (var i = 0; i < STAR_COUNT; i++) {
+        stars.push(new Star(w, h))
+      }
+      for (var j = 0; j < SHOOTING_COUNT; j++) {
+        shootingStars.push(new ShootingStar(w, h))
       }
     }
 
     init()
-    return () => {
-      if (vantaEffect.current) { vantaEffect.current.destroy(); vantaEffect.current = null }
+
+    function animate(timestamp) {
+      var w = canvas.width / Math.min(window.devicePixelRatio || 1, 2)
+      var h = canvas.height / Math.min(window.devicePixelRatio || 1, 2)
+      var time = timestamp * 0.001
+      ctx.clearRect(0, 0, w, h)
+      for (var i = 0; i < stars.length; i++) {
+        stars[i].draw(ctx, time)
+      }
+      for (var j = 0; j < shootingStars.length; j++) {
+        shootingStars[j].update()
+        shootingStars[j].draw(ctx)
+      }
+      animationId = requestAnimationFrame(animate)
+    }
+
+    animationId = requestAnimationFrame(animate)
+
+    return function() {
+      cancelAnimationFrame(animationId)
+      window.removeEventListener('resize', resize)
+      stars = []
+      shootingStars = []
+    }
+  }, [canvasRef])
+}
+
+var StarfieldCanvas = function() {
+  var ref = useRef(null)
+  useStarfieldCanvas(ref)
+  return React.createElement('canvas', {
+    ref: ref,
+    className: 'starfield-canvas'
+  })
+}
+
+var CosmicDust = function() {
+  var particles = useMemo(function() {
+    var arr = []
+    for (var i = 0; i < 25; i++) {
+      arr.push({
+        id: i,
+        left: Math.random() * 100 + '%',
+        top: Math.random() * 100 + '%',
+        size: Math.random() * 2.5 + 0.5 + 'px',
+        duration: (Math.random() * 18 + 10) + 's',
+        delay: (Math.random() * 12) + 's',
+        drift: ((Math.random() - 0.5) * 80) + 'px'
+      })
+    }
+    return arr
+  }, [])
+
+  return React.createElement('div', { style: { position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' } },
+    particles.map(function(p) {
+      return React.createElement('div', {
+        key: p.id,
+        className: 'dust-particle',
+        style: {
+          left: p.left,
+          top: p.top,
+          width: p.size,
+          height: p.size,
+          animationDuration: p.duration,
+          animationDelay: p.delay,
+          '--drift': p.drift
+        }
+      })
+    })
+  )
+}
+
+export default function Login() {
+  var _useState = useState(''), email = _useState[0], setEmail = _useState[1]
+  var _useState2 = useState(''), password = _useState2[0], setPassword = _useState2[1]
+  var _useState3 = useState(''), error = _useState3[0], setError = _useState3[1]
+  var _useState4 = useState(false), loading = _useState4[0], setLoading = _useState4[1]
+  var _useState5 = useState(false), remember = _useState5[0], setRemember = _useState5[1]
+  var _useState6 = useState(false), showPass = _useState6[0], setShowPass = _useState6[1]
+  var login = useAuth().login
+
+  useEffect(function() {
+    if (!document.getElementById('deep-nebula-styles')) {
+      var el = document.createElement('style')
+      el.id = 'deep-nebula-styles'
+      el.textContent = STYLES
+      document.head.appendChild(el)
+    }
+    return function() {
+      var el = document.getElementById('deep-nebula-styles')
+      if (el) el.remove()
     }
   }, [])
 
-  const handleLogin = async (e) => {
+  useEffect(function() {
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('user')
+  }, [])
+
+  var handleSubmit = useCallback(async function(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
     try {
-      const { data } = await api.post('/auth/login', { email, password })
-      login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
-    } catch {
-      setError('Invalid email or password')
+      var response = await api.post('/auth/login', { email: email, password: password })
+      var data = response.data
+      login(
+        { id: data.id, email: data.email, fullName: data.fullName, role: data.role },
+        data.token
+      )
+    } catch (err) {
+      var message = 'Invalid email or password. Please try again.'
+      if (err.response && err.response.data && err.response.data.message) {
+        message = err.response.data.message
+      }
+      setError(message)
       setLoading(false)
     }
-  }
+  }, [email, password, login])
 
-  const TRUST = ['End-to-end encrypted', 'Zero-trust secure', 'Premium AI']
+  var togglePassword = useCallback(function() {
+    setShowPass(function(prev) { return !prev })
+  }, [])
 
-  return (
-    <div className="lp-page">
+  var toggleRemember = useCallback(function() {
+    setRemember(function(prev) { return !prev })
+  }, [])
 
-      {/* Vanta Globe bg */}
-      <div ref={vantaRef} className="lp-vanta" />
+  var trustItems = useMemo(function() {
+    return ['Enterprise Grade', 'SOC2 Compliant', '256-bit Encryption']
+  }, [])
 
-      {/* Particles */}
-      <div className="lp-particles">
-        {Array.from({ length: 24 }).map((_, i) => (
-          <div key={i} className="lp-particle" style={{
-            left:              `${(i * 37 + 11) % 100}%`,
-            width:             `${(i % 3) + 2}px`,
-            height:            `${(i % 3) + 2}px`,
-            animationDuration: `${10 + (i % 7) * 2}s`,
-            animationDelay:    `${(i * 1.3) % 11}s`,
-            opacity:            0.25 + (i % 4) * 0.12,
-          }} />
-        ))}
-      </div>
+  return React.createElement('div', { className: 'cosmic-viewport' },
+    React.createElement('div', { className: 'nebula-layer' }),
+    React.createElement('div', { className: 'cosmic-grid' }),
+    React.createElement(StarfieldCanvas),
+    React.createElement(CosmicDust),
+    React.createElement('div', { className: 'cosmic-orb orb-1' }),
+    React.createElement('div', { className: 'cosmic-orb orb-2' }),
+    React.createElement('div', { className: 'cosmic-orb orb-3' }),
+    React.createElement('div', { className: 'cosmic-orb orb-4' }),
+    React.createElement('div', { className: 'ring-system' },
+      React.createElement('div', { className: 'orbital-ring ring-1' }, React.createElement('div', { className: 'ring-dot' })),
+      React.createElement('div', { className: 'orbital-ring ring-2' }, React.createElement('div', { className: 'ring-dot' })),
+      React.createElement('div', { className: 'orbital-ring ring-3' }, React.createElement('div', { className: 'ring-dot' }))
+    ),
+    React.createElement('div', { className: 'shooting-star shoot-1' }),
+    React.createElement('div', { className: 'shooting-star shoot-2' }),
+    React.createElement('div', { className: 'shooting-star shoot-3' }),
+    React.createElement('div', { className: 'vignette' }),
+    React.createElement('div', { className: 'scanlines' }),
 
-      {/* Rings */}
-      <div className="lp-rings">
-        {[0, 2.5, 5, 7.5].map((d, i) => (
-          <div key={i} className="lp-ring" style={{ animationDelay: `${d}s` }} />
-        ))}
-      </div>
+    React.createElement('div', { className: 'login-stage' },
+      React.createElement('div', { className: 'auth-panel' },
+        React.createElement('div', { className: 'card-inner-glow' }),
+        React.createElement('div', { className: 'panel-content' },
+          React.createElement('div', { className: 'brand-block' },
+            React.createElement('div', { className: 'logo-emblem' },
+              React.createElement('div', { className: 'logo-orbit' }),
+              React.createElement('div', { className: 'emblem-core' },
+                React.createElement('svg', { width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none' },
+                  React.createElement('path', { d: 'M12 2L14.5 7.5L20 8L16 12.5L17 18L12 15L7 18L8 12.5L4 8L9.5 7.5L12 2Z', fill: 'white', opacity: '0.9' })
+                )
+              )
+            ),
+            React.createElement('h1', { className: 'brand-title' },
+              'Interview',
+              React.createElement('span', { className: 'brand-accent' }, 'AI')
+            ),
+            React.createElement('p', { className: 'brand-subtitle' }, 'Welcome back to your dashboard')
+          ),
 
-      {/* Status badge */}
-      <div className="lp-top-badge">
-        <span className="lp-badge-dot" />
-        NEURAL NETWORK ACTIVE
-      </div>
+          React.createElement('form', { className: 'auth-form', onSubmit: handleSubmit, autoComplete: 'off' },
+            React.createElement('div', { className: 'field-group' },
+              React.createElement('label', { className: 'field-label' },
+                React.createElement('svg', { className: 'label-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
+                  React.createElement('rect', { x: '2', y: '4', width: '20', height: '16', rx: '2' }),
+                  React.createElement('path', { d: 'M22 7L13 13L4 7' })
+                ),
+                'Email Address'
+              ),
+              React.createElement('input', {
+                type: 'email',
+                className: 'form-input',
+                placeholder: 'you@example.com',
+                value: email,
+                onChange: function(e) { setEmail(e.target.value) },
+                required: true,
+                autoComplete: 'email'
+              })
+            ),
 
-      {/* Stat chips */}
-      <div className="lp-chip lp-chip-a">
-        <span className="lp-chip-v">98%</span>
-        <span className="lp-chip-l">Accuracy</span>
-      </div>
-      <div className="lp-chip lp-chip-b">
-        <span className="lp-chip-v">2.4s</span>
-        <span className="lp-chip-l">Response</span>
-      </div>
-      <div className="lp-chip lp-chip-c">
-        <span className="lp-chip-v">50k+</span>
-        <span className="lp-chip-l">Interviews</span>
-      </div>
+            React.createElement('div', { className: 'field-group' },
+              React.createElement('label', { className: 'field-label' },
+                React.createElement('svg', { className: 'label-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
+                  React.createElement('rect', { x: '3', y: '11', width: '18', height: '11', rx: '2' }),
+                  React.createElement('circle', { cx: '12', cy: '16', r: '1' }),
+                  React.createElement('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' })
+                ),
+                'Password'
+              ),
+              React.createElement('div', { className: 'input-container' },
+                React.createElement('input', {
+                  type: showPass ? 'text' : 'password',
+                  className: 'form-input input-has-icon',
+                  placeholder: '••••••••',
+                  value: password,
+                  onChange: function(e) { setPassword(e.target.value) },
+                  required: true,
+                  autoComplete: 'current-password'
+                }),
+                React.createElement('button', {
+                  type: 'button',
+                  className: 'password-toggle',
+                  onClick: togglePassword,
+                  tabIndex: -1,
+                  'aria-label': showPass ? 'Hide password' : 'Show password'
+                },
+                  showPass ?
+                    React.createElement('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
+                      React.createElement('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' }),
+                      React.createElement('circle', { cx: '12', cy: '12', r: '3' })
+                    ) :
+                    React.createElement('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
+                      React.createElement('path', { d: 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94' }),
+                      React.createElement('path', { d: 'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19' }),
+                      React.createElement('line', { x1: '1', y1: '1', x2: '23', y2: '23' })
+                    )
+                )
+              )
+            ),
 
-      {/* Card */}
-      <div className="lp-card">
-        <div className="lp-shimmer" />
+            React.createElement('div', { className: 'actions-row' },
+              React.createElement('div', { className: 'remember-wrap', onClick: toggleRemember },
+                React.createElement('div', { className: 'custom-checkbox' + (remember ? ' checked' : '') },
+                  remember && React.createElement('svg', { width: '11', height: '9', viewBox: '0 0 11 9', fill: 'none', stroke: 'white', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round' },
+                    React.createElement('path', { d: 'M1 4.5L4 7.5L10 1.5' })
+                  )
+                ),
+                React.createElement('span', { className: 'remember-label' }, 'Remember me')
+              ),
+              React.createElement('button', { type: 'button', className: 'forgot-btn' }, 'Forgot password?')
+            ),
 
-        {/* Brand */}
-        <div className="lp-brand">
-          <div className="lp-logo-box">
-            <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
-              <rect x="4" y="4" width="24" height="24" rx="6" stroke="white" strokeWidth="1.5"/>
-              <path d="M12 14L16 18L20 14" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-              <circle cx="16" cy="16" r="2.5" fill="white"/>
-            </svg>
-          </div>
-          <span className="lp-brand-name">Interview<span>AI</span></span>
-        </div>
+            error && React.createElement('div', { className: 'error-block' },
+              React.createElement('svg', { className: 'error-icon-block', width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2' },
+                React.createElement('circle', { cx: '12', cy: '12', r: '10' }),
+                React.createElement('line', { x1: '12', y1: '8', x2: '12', y2: '12' }),
+                React.createElement('line', { x1: '12', y1: '16', x2: '12.01', y2: '16' })
+              ),
+              error
+            ),
 
-        <h1 className="lp-h1">Welcome back.</h1>
-        <p className="lp-sub">Secure access &bull; premium experience</p>
+            React.createElement('button', { type: 'submit', className: 'submit-btn', disabled: loading },
+              React.createElement('div', { className: 'btn-inner' },
+                loading && React.createElement('div', { className: 'btn-spinner' }),
+                React.createElement('span', null, loading ? 'Signing in...' : 'Sign In')
+              )
+            )
+          ),
 
-        <form onSubmit={handleLogin} autoComplete="off">
+          React.createElement('div', { className: 'divider-wrap' },
+            React.createElement('div', { className: 'divider-line' }),
+            React.createElement('span', { className: 'divider-text' }, 'or'),
+            React.createElement('div', { className: 'divider-line' })
+          ),
 
-          {/* Email */}
-          <div className={`lp-field${focused === 'email' ? ' lp-field-active' : ''}`}>
-            <label className="lp-label">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <rect x="2" y="4" width="20" height="16" rx="3"/>
-                <path d="m2 7 10 7 10-7"/>
-              </svg>
-              Email address
-            </label>
-            <input
-              type="email" className="lp-input"
-              placeholder="you@example.com"
-              value={email} onChange={e => setEmail(e.target.value)}
-              onFocus={() => setFocused('email')} onBlur={() => setFocused('')}
-              required
-            />
-          </div>
+          React.createElement('div', { className: 'register-wrap' },
+            React.createElement('span', { className: 'register-prompt' },
+              "Don't have an account?",
+              React.createElement(Link, { to: '/register', className: 'register-link' }, 'Create one')
+            )
+          ),
 
-          {/* Password */}
-          <div className={`lp-field${focused === 'pass' ? ' lp-field-active' : ''}`}>
-            <label className="lp-label">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <rect x="3" y="11" width="18" height="11" rx="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              Password
-            </label>
-            <div className="lp-iw">
-              <input
-                type={showPass ? 'text' : 'password'}
-                className="lp-input lp-input-p"
-                placeholder="··········"
-                value={password} onChange={e => setPassword(e.target.value)}
-                onFocus={() => setFocused('pass')} onBlur={() => setFocused('')}
-                required
-              />
-              <button type="button" className="lp-eye" onClick={() => setShowPass(p => !p)} tabIndex={-1}>
-                {showPass ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
+          React.createElement('div', { className: 'trust-row' },
+            trustItems.map(function(item) {
+              return React.createElement('div', { key: item, className: 'trust-pill' },
+                React.createElement('span', { className: 'pill-dot' }),
+                item
+              )
+            })
+          ),
 
-          {/* Row */}
-          <div className="lp-row">
-            <label className="lp-remember" onClick={() => setRemember(p => !p)}>
-              <div className={`lp-chk${remember ? ' lp-chk-on' : ''}`}>
-                {remember && (
-                  <svg width="9" height="7" viewBox="0 0 10 8" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 4l2.5 2.5L9 1"/>
-                  </svg>
-                )}
-              </div>
-              Remember me
-            </label>
-            <button type="button" className="lp-forgot">Forgot password?</button>
-          </div>
-
-          {error && (
-            <div className="lp-error">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {error}
-            </div>
-          )}
-
-          <button type="submit" className="lp-btn" disabled={loading}>
-            {loading && <span className="lp-spinner" />}
-            {loading ? 'Signing in…' : 'Sign in to InterviewAI'}
-          </button>
-
-        </form>
-
-        <div className="lp-div"><span>or</span></div>
-
-        <p className="lp-reg">
-          No account yet? <Link to="/register">Create one free &rarr;</Link>
-        </p>
-
-        <div className="lp-trust">
-          {TRUST.map(label => (
-            <span key={label} className="lp-tbadge">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-              {label}
-            </span>
-          ))}
-        </div>
-
-        <p className="lp-footer">
-          By signing in you agree to our{' '}
-          <span>Terms of Service</span> and <span>Privacy Policy</span>.
-        </p>
-      </div>
-    </div>
+          React.createElement('p', { className: 'legal-footer' },
+            'By signing in, you agree to our ',
+            React.createElement('span', { className: 'legal-link' }, 'Terms of Service'),
+            ' and ',
+            React.createElement('span', { className: 'legal-link' }, 'Privacy Policy'),
+            '.'
+          )
+        )
+      )
+    )
   )
 }
