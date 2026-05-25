@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
@@ -31,6 +31,7 @@ const STYLES = `
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    --shadow-3d: 0 20px 60px rgba(99, 102, 241, 0.12), 0 8px 20px rgba(0, 0, 0, 0.06);
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
@@ -38,6 +39,8 @@ const STYLES = `
     --transition-fast: 150ms ease;
     --transition-base: 200ms ease;
     --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    --transition-bounce: 500ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
   *, *::before, *::after {
@@ -57,35 +60,109 @@ const STYLES = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 50%, #E0E7FF 100%);
+    background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 40%, #E0E7FF 70%, #F8FAFC 100%);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     padding: 24px;
     position: relative;
     overflow: hidden;
+    perspective: 1000px;
   }
 
-  .bg-pattern {
+  .bg-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .bg-orb-1 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+    top: -100px;
+    right: -100px;
+    animation: orbFloat1 8s ease-in-out infinite;
+  }
+
+  .bg-orb-2 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
+    bottom: -80px;
+    left: -80px;
+    animation: orbFloat2 10s ease-in-out infinite;
+  }
+
+  .bg-orb-3 {
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.04) 0%, transparent 70%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: orbFloat3 12s ease-in-out infinite;
+  }
+
+  @keyframes orbFloat1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-30px, 30px) scale(1.15); }
+  }
+
+  @keyframes orbFloat2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(30px, -20px) scale(1.1); }
+  }
+
+  @keyframes orbFloat3 {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.2); }
+  }
+
+  .bg-grid-pattern {
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.4;
+    opacity: 0.15;
     background-image: 
-      radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
-      radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.04) 0%, transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.02) 0%, transparent 50%);
+      linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
   }
 
-  .bg-grid {
+  .floating-particles {
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.3;
-    background-image: 
-      linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
-    background-size: 60px 60px;
+  }
+
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--accent-500);
+    opacity: 0;
+    animation: particleFloat linear infinite;
+  }
+
+  @keyframes particleFloat {
+    0% {
+      transform: translateY(100vh) translateX(0) scale(0);
+      opacity: 0;
+    }
+    10% {
+      opacity: 0.6;
+    }
+    90% {
+      opacity: 0.1;
+    }
+    100% {
+      transform: translateY(-10vh) translateX(var(--drift-x)) scale(1.5);
+      opacity: 0;
+    }
   }
 
   .login-container {
@@ -93,17 +170,20 @@ const STYLES = `
     z-index: 1;
     width: 100%;
     max-width: 440px;
-    animation: fadeInUp 0.5s ease both;
+    animation: card3DEntry 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-style: preserve-3d;
   }
 
-  @keyframes fadeInUp {
+  @keyframes card3DEntry {
     from {
       opacity: 0;
-      transform: translateY(16px);
+      transform: translateY(30px) rotateX(10deg) scale(0.95);
+      filter: blur(4px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) rotateX(0deg) scale(1);
+      filter: blur(0);
     }
   }
 
@@ -112,7 +192,52 @@ const STYLES = `
     border: 1px solid var(--border-light);
     border-radius: var(--radius-xl);
     padding: 44px 40px 36px;
-    box-shadow: var(--shadow-xl);
+    box-shadow: var(--shadow-3d);
+    transform-style: preserve-3d;
+    transition: all var(--transition-smooth);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .auth-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-500), var(--accent-200), transparent);
+    opacity: 0;
+    transition: opacity var(--transition-smooth);
+  }
+
+  .auth-card:hover::before {
+    opacity: 1;
+  }
+
+  .auth-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 30px 80px rgba(99, 102, 241, 0.15), 0 10px 30px rgba(0, 0, 0, 0.08);
+  }
+
+  .card-shine {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(
+      circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(99, 102, 241, 0.03) 0%,
+      transparent 50%
+    );
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .auth-card:hover .card-shine {
+    opacity: 1;
   }
 
   .brand-section {
@@ -130,6 +255,17 @@ const STYLES = `
     align-items: center;
     justify-content: center;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+    transition: all var(--transition-spring);
+    cursor: pointer;
+  }
+
+  .logo-icon:hover {
+    transform: scale(1.1) rotate(10deg);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+  }
+
+  .logo-icon:active {
+    transform: scale(0.95) rotate(0deg);
   }
 
   .logo-icon svg {
@@ -147,7 +283,10 @@ const STYLES = `
   }
 
   .brand-accent {
-    color: var(--accent-500);
+    background: linear-gradient(135deg, #6366F1, #818CF8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
   .brand-tagline {
@@ -173,6 +312,11 @@ const STYLES = `
     font-weight: 600;
     color: var(--text-secondary);
     letter-spacing: -0.1px;
+    transition: color var(--transition-fast);
+  }
+
+  .field:focus-within .field-label {
+    color: var(--accent-500);
   }
 
   .input-wrap {
@@ -200,12 +344,14 @@ const STYLES = `
 
   .input:hover {
     border-color: var(--border-medium);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
   }
 
   .input:focus {
     border-color: var(--border-focus);
     background: var(--bg-secondary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.06), 0 2px 8px rgba(99, 102, 241, 0.08);
+    transform: translateY(-1px);
   }
 
   .input-padding-right {
@@ -233,6 +379,10 @@ const STYLES = `
     background: var(--accent-50);
   }
 
+  .toggle-password:active {
+    transform: translateY(-50%) scale(0.9);
+  }
+
   .row {
     display: flex;
     align-items: center;
@@ -255,19 +405,26 @@ const STYLES = `
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--transition-fast);
+    transition: all var(--transition-spring);
     flex-shrink: 0;
   }
 
   .checkbox.active {
     background: var(--accent-500);
     border-color: var(--accent-500);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    transform: scale(1.1);
   }
 
   .remember-text {
     font-size: 13px;
     color: var(--text-tertiary);
     font-weight: 500;
+    transition: color var(--transition-fast);
+  }
+
+  .remember:hover .remember-text {
+    color: var(--text-secondary);
   }
 
   .forgot-link {
@@ -278,11 +435,31 @@ const STYLES = `
     font-weight: 600;
     color: var(--accent-500);
     cursor: pointer;
-    transition: color var(--transition-fast);
+    transition: all var(--transition-fast);
+    padding: 4px 8px;
+    border-radius: 4px;
+    position: relative;
+  }
+
+  .forgot-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 8px;
+    right: 8px;
+    height: 1.5px;
+    background: var(--accent-500);
+    transform: scaleX(0);
+    transition: transform var(--transition-base);
   }
 
   .forgot-link:hover {
     color: var(--accent-700);
+    background: var(--accent-50);
+  }
+
+  .forgot-link:hover::after {
+    transform: scaleX(1);
   }
 
   .error-box {
@@ -296,6 +473,15 @@ const STYLES = `
     color: var(--error);
     font-size: 13px;
     font-weight: 500;
+    animation: shakeError 0.4s ease;
+  }
+
+  @keyframes shakeError {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
   }
 
   .error-icon {
@@ -320,21 +506,40 @@ const STYLES = `
     justify-content: center;
     gap: 10px;
     letter-spacing: 0.2px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .submit-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.6s ease;
   }
 
   .submit-btn:hover:not(:disabled) {
     background: linear-gradient(135deg, #4F46E5, #4338CA);
-    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
-    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35), 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .submit-btn:hover:not(:disabled)::before {
+    left: 100%;
   }
 
   .submit-btn:active:not(:disabled) {
-    transform: translateY(0);
+    transform: translateY(0) scale(0.98);
+    transition: all 0.1s ease;
   }
 
   .submit-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+    transform: none;
   }
 
   .spinner {
@@ -384,11 +589,31 @@ const STYLES = `
     font-weight: 600;
     text-decoration: none;
     margin-left: 4px;
-    transition: color var(--transition-fast);
+    transition: all var(--transition-fast);
+    padding: 2px 6px;
+    border-radius: 4px;
+    position: relative;
+  }
+
+  .register-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 6px;
+    right: 6px;
+    height: 1.5px;
+    background: var(--accent-500);
+    transform: scaleX(0);
+    transition: transform var(--transition-base);
   }
 
   .register-link:hover {
     color: var(--accent-700);
+    background: var(--accent-50);
+  }
+
+  .register-link:hover::after {
+    transform: scaleX(1);
   }
 
   .features {
@@ -411,6 +636,15 @@ const STYLES = `
     color: var(--accent-600);
     font-weight: 600;
     letter-spacing: 0.2px;
+    transition: all var(--transition-smooth);
+    cursor: default;
+  }
+
+  .feature-badge:hover {
+    background: var(--accent-100);
+    border-color: var(--accent-200);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
   }
 
   .badge-dot {
@@ -432,11 +666,28 @@ const STYLES = `
     color: var(--text-tertiary);
     cursor: pointer;
     font-weight: 500;
-    transition: color var(--transition-fast);
+    transition: all var(--transition-fast);
+    position: relative;
+  }
+
+  .footer-link::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--accent-500);
+    transform: scaleX(0);
+    transition: transform var(--transition-base);
   }
 
   .footer-link:hover {
     color: var(--accent-500);
+  }
+
+  .footer-link:hover::after {
+    transform: scaleX(1);
   }
 
   @media (max-width: 480px) {
@@ -451,7 +702,51 @@ const STYLES = `
       padding: 0;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 `
+
+function FloatingParticles() {
+  const particles = useMemo(() => {
+    const arr = []
+    for (let i = 0; i < 15; i++) {
+      arr.push({
+        id: i,
+        left: Math.random() * 100 + '%',
+        size: Math.random() * 4 + 2 + 'px',
+        duration: Math.random() * 12 + 8 + 's',
+        delay: Math.random() * 10 + 's',
+        driftX: (Math.random() - 0.5) * 100 + 'px'
+      })
+    }
+    return arr
+  }, [])
+
+  return (
+    <div className="floating-particles">
+      {particles.map(p => (
+        <div
+          key={p.id}
+          className="particle"
+          style={{
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+            '--drift-x': p.driftX
+          }}
+        />
+      ))}
+    </div>
+  )
+}
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -460,17 +755,18 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [remember, setRemember] = useState(false)
   const [showPass, setShowPass] = useState(false)
+  const cardRef = useRef(null)
   const { login } = useAuth()
 
   useEffect(() => {
-    if (!document.getElementById('clean-login-styles')) {
+    if (!document.getElementById('modern-login-styles')) {
       const el = document.createElement('style')
-      el.id = 'clean-login-styles'
+      el.id = 'modern-login-styles'
       el.textContent = STYLES
       document.head.appendChild(el)
     }
     return () => {
-      const el = document.getElementById('clean-login-styles')
+      const el = document.getElementById('modern-login-styles')
       if (el) el.remove()
     }
   }, [])
@@ -478,6 +774,21 @@ export default function Login() {
   useEffect(() => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
+  }, [])
+
+  const handleMouseMove = useCallback((e) => {
+    if (!cardRef.current) return
+    const rect = cardRef.current.getBoundingClientRect()
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    cardRef.current.style.setProperty('--mouse-x', x + '%')
+    cardRef.current.style.setProperty('--mouse-y', y + '%')
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    if (!cardRef.current) return
+    cardRef.current.style.setProperty('--mouse-x', '50%')
+    cardRef.current.style.setProperty('--mouse-y', '50%')
   }, [])
 
   const handleSubmit = useCallback(async (e) => {
@@ -505,11 +816,21 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div className="bg-pattern" />
-      <div className="bg-grid" />
+      <div className="bg-orb bg-orb-1" />
+      <div className="bg-orb bg-orb-2" />
+      <div className="bg-orb bg-orb-3" />
+      <div className="bg-grid-pattern" />
+      <FloatingParticles />
 
       <div className="login-container">
-        <div className="auth-card">
+        <div
+          ref={cardRef}
+          className="auth-card"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          <div className="card-shine" />
+
           <div className="brand-section">
             <div className="logo-icon">
               <svg viewBox="0 0 24 24" fill="none">
