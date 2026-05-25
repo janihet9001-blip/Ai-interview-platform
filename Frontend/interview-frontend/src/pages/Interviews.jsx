@@ -1,6 +1,5 @@
 import CameraStream from '../components/CameraStream'
-import { useContext } from 'react'
-import { AuthContext } from '../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import API from '../services/api'
@@ -144,6 +143,7 @@ function TypingBubble() {
 export default function Interviews() {
   const { role } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   useEffect(() => {
     window.history.pushState(null, '', window.location.href)
@@ -395,7 +395,7 @@ Respond ONLY with a raw JSON object:
         setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 2200)
 
         const client = new Client({
-          webSocketFactory: () => new SockJS('import.meta.env.VITE_WS_URL'),
+webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
           onConnect: () => {
 
             client.subscribe(`/topic/feedback/${sessionData.id}`, (message) => {
@@ -821,15 +821,15 @@ Respond ONLY with a raw JSON object:
         </div>
       </nav>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '780px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-        {messages.map((msg, i) => {
-          if (msg.from === 'bot') return <BotBubble key={i} text={msg.text} />
-          if (msg.from === 'interviewer') return <InterviewerBubble key={i} text={msg.text} />
-          return <UserBubble key={i} text={msg.text} />
-        })}
-        {submitting && <TypingBubble />}
-        <div ref={chatEndRef} />
-      </div>
+<div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '780px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+  {messages.map((msg, i) => {
+    if (msg.from === 'bot') return <BotBubble key={i} text={msg.text} />
+    if (msg.from === 'interviewer') return <InterviewerBubble key={i} text={msg.text} />
+    return <UserBubble key={i} text={msg.text} />
+  })}
+  {submitting && <TypingBubble />}
+  <div ref={chatEndRef} />
+</div>
 
       <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)', padding: '20px 24px', flexShrink: 0 }}>
         <div style={{ maxWidth: '780px', margin: '0 auto' }}>

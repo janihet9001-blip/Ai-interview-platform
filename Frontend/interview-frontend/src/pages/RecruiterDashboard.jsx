@@ -1,3 +1,4 @@
+import AdminCameraView from '../components/AdminCameraView'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
@@ -14,109 +15,6 @@ const JOB_ROLES = [
 
 const pctColor = (pct) =>
   pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
-
-function CandidateCameraFeed({ candidateName, sessionId }) {
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const [status, setStatus] = useState('idle')
-
-  useEffect(() => {
-    if (!sessionId) return
-    let stream
-    async function start() {
-      setStatus('loading')
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
-        setStatus('active')
-      } catch {
-        setStatus('denied')
-      }
-    }
-    start()
-    return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-      setStatus('idle')
-    }
-  }, [sessionId])
-
-  if (!sessionId) {
-    return (
-      <div style={feed.placeholder}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.2">
-          <polygon points="23 7 16 12 23 17 23 7" />
-          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-        </svg>
-        <span style={feed.placeholderText}>No active session</span>
-      </div>
-    )
-  }
-
-  return (
-    <div style={feed.wrapper}>
-      <div style={feed.header}>
-        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: status === 'active' ? 'var(--cyan)' : 'var(--text-muted)', boxShadow: status === 'active' ? '0 0 6px var(--cyan)' : 'none', flexShrink: 0 }} />
-        <span style={feed.headerLabel}>{candidateName?.toUpperCase() ?? 'CANDIDATE'}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {status === 'active' && <span style={feed.liveBadge}>● LIVE</span>}
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.1em' }}>SESSION #{sessionId}</span>
-        </div>
-      </div>
-      <div style={feed.videoBox}>
-        <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transform: 'scaleX(-1)', opacity: status === 'active' ? 1 : 0, transition: 'opacity 0.3s' }} />
-        {status === 'loading' && (
-          <div style={feed.overlay}>
-            <div style={{ width: '24px', height: '24px', borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: 'var(--cyan)', animation: 'spin 0.9s linear infinite' }} />
-            <span style={feed.overlayText}>Connecting feed…</span>
-          </div>
-        )}
-        {status === 'denied' && (
-          <div style={feed.overlay}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="1.5">
-              <line x1="1" y1="1" x2="23" y2="23" />
-              <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-            </svg>
-            <span style={{ ...feed.overlayText, color: 'var(--red)' }}>Camera access denied</span>
-          </div>
-        )}
-        {status === 'active' && <div style={{ position: 'absolute', left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, var(--cyan), transparent)', opacity: 0.25, animation: 'scanline 3s linear infinite', pointerEvents: 'none' }} />}
-        {[
-          { top: 6, left: 6, borderTop: '2px solid var(--cyan)', borderLeft: '2px solid var(--cyan)' },
-          { top: 6, right: 6, borderTop: '2px solid var(--cyan)', borderRight: '2px solid var(--cyan)' },
-          { bottom: 6, left: 6, borderBottom: '2px solid var(--cyan)', borderLeft: '2px solid var(--cyan)' },
-          { bottom: 6, right: 6, borderBottom: '2px solid var(--cyan)', borderRight: '2px solid var(--cyan)' },
-        ].map((s, i) => <div key={i} style={{ position: 'absolute', width: 12, height: 12, opacity: 0.55, ...s }} />)}
-        {status === 'active' && (
-          <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.55)', borderRadius: '4px', padding: '3px 7px' }}>
-            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--red)', display: 'inline-block', animation: 'pulse-dot 1.2s infinite' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'white', letterSpacing: '0.1em' }}>REC</span>
-          </div>
-        )}
-      </div>
-      <div style={feed.footer}>
-        <span style={{ ...feed.footerText, color: status === 'active' ? 'var(--green)' : 'var(--text-muted)' }}>
-          {status === 'active' ? '● Connected' : status === 'loading' ? '◌ Connecting' : '○ Offline'}
-        </span>
-        <span style={feed.footerText}>Proctoring active</span>
-      </div>
-    </div>
-  )
-}
-
-const feed = {
-  wrapper: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', boxShadow: '0 0 20px rgba(6,182,212,0.07)', marginBottom: '20px' },
-  header: { display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 13px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' },
-  headerLabel: { fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text)', letterSpacing: '0.08em', flex: 1 },
-  liveBadge: { fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.12em', color: 'var(--red)', background: '#EF444415', border: '1px solid #EF444440', borderRadius: '4px', padding: '2px 6px' },
-  videoBox: { position: 'relative', width: '100%', aspectRatio: '16/9', background: '#050810', overflow: 'hidden' },
-  overlay: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'var(--surface2)' },
-  overlayText: { fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)' },
-  placeholder: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '28px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: '20px' },
-  placeholderText: { fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' },
-  footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 13px', background: 'var(--surface2)', borderTop: '1px solid var(--border)' },
-  footerText: { fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.06em' },
-}
 
 export default function RecruiterDashboard() {
   const [violationCount, setViolationCount] = useState(0)
@@ -265,7 +163,7 @@ const allParsed = (res.data || [])
     if (!activeSessionId) return
     setWsConnected(false)
     const client = new Client({
-      webSocketFactory: () => new SockJS('import.meta.env.VITE_WS_URL'),
+webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
       reconnectDelay: 2000,
       onConnect: () => {
         setWsConnected(true)
@@ -685,7 +583,7 @@ const allParsed = (res.data || [])
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <CandidateCameraFeed candidateName={selectedCandidate?.fullName} sessionId={activeSessionId} />
+            <AdminCameraView userId={selectedCandidate?.id} />
             <div className="card" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>Live Feed</p>
