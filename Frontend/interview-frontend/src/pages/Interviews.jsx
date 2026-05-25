@@ -161,6 +161,7 @@ export default function Interviews() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [navigate])
 
+  const [proctoringEnabled, setProctoringEnabled] = useState(false)
   const [session, setSession] = useState(null)
   const [questions, setQuestions] = useState([])
   const [current, setCurrent] = useState(0)
@@ -194,6 +195,9 @@ export default function Interviews() {
   const questionsRef = useRef([])
   const currentRef = useRef(0)
   const chatEndRef = useRef(null)
+const sessionStarted = useRef(false)
+const spokenRef = useRef(new Set())
+  const [showCamera, setShowCamera] = useState(false)
 
   const accent = roleColors[role] || '#2563EB'
   const fmt = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
@@ -227,29 +231,43 @@ export default function Interviews() {
     return () => clearInterval(interval)
   }, [showTerminated])
 
-  const botSay = (text) => {
-    setMessages(prev => {
-      if (prev.length > 0 && prev[prev.length - 1].text === text) return prev
-      return [...prev, { from: 'bot', text }]
-    })
-    window.speechSynthesis.cancel()
+const botSay = (text) => {
+  if (spokenRef.current.has(text)) return
+  spokenRef.current.add(text)
+  
+  setMessages(prev => [...prev, { from: 'bot', text }])
+
+  const speakWhenReady = () => {
+    if (window.speechSynthesis.speaking) {
+      setTimeout(speakWhenReady, 100)
+      return
+    }
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 0.95
     utterance.pitch = 1
     utterance.volume = 1
     window.speechSynthesis.speak(utterance)
   }
+  speakWhenReady()
+}
 
-  const interviewerSay = (text) => {
-    setMessages(prev => [...prev, { from: 'interviewer', text }])
-    window.speechSynthesis.cancel()
+const interviewerSay = (text) => {
+  setMessages(prev => [...prev, { from: 'interviewer', text }])
+  
+  const speakWhenReady = () => {
+    if (window.speechSynthesis.speaking) {
+      setTimeout(speakWhenReady, 100)
+      return
+    }
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 0.95
     utterance.pitch = 1
     utterance.volume = 1
     window.speechSynthesis.speak(utterance)
   }
-
+  
+  speakWhenReady()
+}
   const userSay = (text) => {
     setMessages(prev => [...prev, { from: 'user', text }])
   }
@@ -365,6 +383,8 @@ Respond ONLY with a raw JSON object:
 
   useEffect(() => {
     const startSession = async () => {
+      if (sessionStarted.current) return
+        sessionStarted.current = true  
       try {
         const urlParams = new URLSearchParams(window.location.search)
         const sessionId = urlParams.get('sessionId')
@@ -391,8 +411,14 @@ Respond ONLY with a raw JSON object:
           return 'Working late'
         }
 
-        setTimeout(() => botSay(`${getGreeting()} - welcome to your ${label} interview.`), 300)
-        setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 2200)
+        const welcomeMsg = `${getGreeting()} — welcome to your ${label} interview. I'll be asking you a series of technical questions. Please answer them clearly and in your own words.`
+const warningMsg = `⚠️ Important: Please close all other tabs and applications before we begin. Do not use AI tools, search engines, or any external help during this interview. All activity is being monitored and any violation will be reported to the recruiter immediately.`
+
+setTimeout(() => botSay(welcomeMsg), 300)
+setTimeout(() => botSay(warningMsg), 2000)
+setTimeout(() => setShowCamera(true), 3500)
+setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 6000)
+setTimeout(() => setProctoringEnabled(true), 6000)
 
         const client = new Client({
 webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
@@ -807,7 +833,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-dim)', padding: '4px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px' }}>{fmt(seconds)}</span>
-          <CameraStream sessionId={session?.id} userId={user?.id} />
+{showCamera && <CameraStream sessionId={session?.id} userId={user?.id} />}
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>Q {current + 1}</span>
           <button
             onClick={handleFinish}
@@ -870,11 +896,11 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
         </div>
       </div>
 
-      <ProctoringHandler
-        sessionId={session?.id}
-        interviewActive={!stopped && !paused && !isAnalyzing}
-        stompClient={stompClient.current}
-      />
+<ProctoringHandler
+  sessionId={session?.id}
+  interviewActive={proctoringEnabled && !stopped && !paused && !isAnalyzing}
+  stompClient={stompClient.current}
+/>
     </div>
   )
 }

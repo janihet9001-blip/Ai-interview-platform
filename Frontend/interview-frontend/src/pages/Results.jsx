@@ -469,27 +469,6 @@ export default function Results() {
           <h1 className="rs-title">Interview Results</h1>
         </div>
 
-        {/* Score card */}
-        <div
-          className="rs-score-card"
-          style={{ '--score-color': gradeColor, '--score-color-faint': gradeFaint, '--score-pct': scoreAngle }}
-        >
-          <div className="rs-score-glow" />
-          <div className="rs-score-circle">
-            <div className="rs-score-ring">
-              <span className="rs-score-num">{percentage}%</span>
-              <span className="rs-score-sub">Score</span>
-            </div>
-          </div>
-          <div className="rs-score-info">
-            <div className="rs-grade-badge">
-              <span className="rs-grade-dot" />
-              {grade}
-            </div>
-<div className="rs-score-stats"></div>
-          </div>
-        </div>
-
         {/* Retrying notice */}
         {retrying && (
           <div className="rs-retrying">

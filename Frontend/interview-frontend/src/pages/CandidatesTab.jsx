@@ -123,8 +123,8 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
   }
 
   const rows = useMemo(() => sessions.map(s => {
-    const candidate = candidates.find(c => c.id === s.user?.id)
-    const name = candidate?.fullName || s.user?.fullName || s.user?.email || `User #${s.user?.id}`
+const candidate = candidates.find(c => c.id === (s.userId || s.user?.id))
+const name = candidate?.fullName || s.userName || s.user?.fullName || s.user?.email || `User #${s.userId || s.user?.id}`
     const aiScorePct = s.totalQuestions > 0
       ? Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)
       : null
