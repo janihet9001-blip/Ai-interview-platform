@@ -1,3 +1,6 @@
+import CameraStream from '../components/CameraStream'
+import { useContext } from 'react'
+import { AuthContext } from '../context/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import API from '../services/api'
@@ -804,6 +807,7 @@ Respond ONLY with a raw JSON object:
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-dim)', padding: '4px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px' }}>{fmt(seconds)}</span>
+          <CameraStream sessionId={session?.id} userId={user?.id} />
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>Q {current + 1}</span>
           <button
             onClick={handleFinish}
