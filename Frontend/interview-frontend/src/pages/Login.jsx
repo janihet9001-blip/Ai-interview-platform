@@ -24,6 +24,8 @@ const STYLES = `
     --border-200: rgba(167, 139, 250, 0.18);
     --border-300: rgba(167, 139, 250, 0.3);
     --glass-bg: rgba(15, 16, 40, 0.65);
+    --error: #EF4444;
+    --success: #10B981;
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 18px;
@@ -43,7 +45,6 @@ const STYLES = `
     overflow: hidden;
   }
 
-  /* ============ MAIN VIEWPORT ============ */
   .cosmic-viewport {
     position: fixed;
     inset: 0;
@@ -58,7 +59,6 @@ const STYLES = `
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* ============ NEBULA BACKGROUND ============ */
   .nebula-layer {
     position: absolute;
     inset: -20%;
@@ -80,7 +80,6 @@ const STYLES = `
     75% { transform: scale(1.05) translate(-2%, -2%); opacity: 0.9; }
   }
 
-  /* ============ COSMIC GRID ============ */
   .cosmic-grid {
     position: absolute;
     inset: 0;
@@ -94,7 +93,6 @@ const STYLES = `
     -webkit-mask-image: radial-gradient(ellipse 75% 75% at 50% 50%, black 20%, transparent 70%);
   }
 
-  /* ============ STARFIELD CANVAS ============ */
   .starfield-canvas {
     position: absolute;
     inset: 0;
@@ -102,7 +100,6 @@ const STYLES = `
     pointer-events: none;
   }
 
-  /* ============ FLOATING ORBS ============ */
   .cosmic-orb {
     position: absolute;
     border-radius: 50%;
@@ -166,7 +163,6 @@ const STYLES = `
     50% { transform: translate(20px, -40px) scale(1.12); }
   }
 
-  /* ============ ORBITAL RINGS ============ */
   .ring-system {
     position: absolute;
     top: 50%;
@@ -224,7 +220,6 @@ const STYLES = `
     to { transform: translate(-50%, -50%) rotate(360deg); }
   }
 
-  /* ============ VIGNETTE OVERLAY ============ */
   .vignette {
     position: absolute;
     inset: 0;
@@ -239,7 +234,6 @@ const STYLES = `
     );
   }
 
-  /* ============ SCANLINES ============ */
   .scanlines {
     position: absolute;
     inset: 0;
@@ -255,7 +249,6 @@ const STYLES = `
     );
   }
 
-  /* ============ SHOOTING STARS (CSS) ============ */
   .shooting-star {
     position: absolute;
     width: 2px;
@@ -292,13 +285,12 @@ const STYLES = `
   }
 
   @keyframes shootStar {
-    0% { opacity: 0; transform: rotate(-35deg) translateX(0) translateY(0); }
+    0% { opacity: 0; }
     3% { opacity: 0.8; }
-    8% { opacity: 0; transform: rotate(-35deg) translateX(-250px) translateY(250px); }
-    100% { opacity: 0; transform: rotate(-35deg) translateX(-250px) translateY(250px); }
+    8% { opacity: 0; }
+    100% { opacity: 0; }
   }
 
-  /* ============ COSMIC DUST ============ */
   .dust-particle {
     position: absolute;
     border-radius: 50%;
@@ -315,7 +307,6 @@ const STYLES = `
     100% { transform: translateY(-100vh) translateX(var(--drift, 30px)); opacity: 0; }
   }
 
-  /* ============ LOGIN CONTAINER ============ */
   .login-stage {
     position: relative;
     z-index: 10;
@@ -330,7 +321,6 @@ const STYLES = `
     100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
   }
 
-  /* ============ AUTH CARD ============ */
   .auth-panel {
     position: relative;
     background: rgba(15, 16, 40, 0.6);
@@ -392,7 +382,6 @@ const STYLES = `
     50% { background-position: 100% 50%; }
   }
 
-  /* Card inner glow */
   .card-inner-glow {
     position: absolute;
     top: -60%;
@@ -418,7 +407,6 @@ const STYLES = `
     z-index: 1;
   }
 
-  /* ============ BRAND ============ */
   .brand-block {
     display: flex;
     flex-direction: column;
@@ -459,7 +447,6 @@ const STYLES = `
       inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
 
-  /* Orbiting dot around logo */
   .logo-orbit {
     position: absolute;
     top: 50%;
@@ -514,7 +501,6 @@ const STYLES = `
     letter-spacing: 0.3px;
   }
 
-  /* ============ FORM ============ */
   .auth-form {
     display: flex;
     flex-direction: column;
@@ -620,7 +606,6 @@ const STYLES = `
     background: rgba(124, 58, 237, 0.1);
   }
 
-  /* ============ ACTIONS ROW ============ */
   .actions-row {
     display: flex;
     align-items: center;
@@ -685,7 +670,6 @@ const STYLES = `
     text-shadow: 0 0 10px rgba(167, 139, 250, 0.3);
   }
 
-  /* ============ ERROR ============ */
   .error-block {
     display: flex;
     align-items: center;
@@ -710,7 +694,6 @@ const STYLES = `
     flex-shrink: 0;
   }
 
-  /* ============ SUBMIT ============ */
   .submit-btn {
     width: 100%;
     padding: 15px;
@@ -792,7 +775,6 @@ const STYLES = `
     to { transform: rotate(360deg); }
   }
 
-  /* ============ DIVIDER ============ */
   .divider-wrap {
     display: flex;
     align-items: center;
@@ -814,7 +796,6 @@ const STYLES = `
     letter-spacing: 1px;
   }
 
-  /* ============ REGISTER ============ */
   .register-wrap {
     text-align: center;
     margin-bottom: 22px;
@@ -839,7 +820,6 @@ const STYLES = `
     text-shadow: 0 0 10px rgba(167, 139, 250, 0.3);
   }
 
-  /* ============ TRUST BADGES ============ */
   .trust-row {
     display: flex;
     justify-content: center;
@@ -885,7 +865,6 @@ const STYLES = `
     50% { opacity: 1; transform: scale(1.2); }
   }
 
-  /* ============ FOOTER ============ */
   .legal-footer {
     text-align: center;
     font-size: 11px;
@@ -904,7 +883,6 @@ const STYLES = `
     color: #A78BFA;
   }
 
-  /* ============ RESPONSIVE ============ */
   @media (max-width: 480px) {
     .auth-panel {
       padding: 32px 22px 28px;
@@ -937,21 +915,21 @@ const STYLES = `
   }
 `
 
-const useStarfieldCanvas = function(canvasRef) {
-  useEffect(function() {
-    var canvas = canvasRef.current
+function useStarfield(canvasRef) {
+  useEffect(() => {
+    const canvas = canvasRef.current
     if (!canvas) return
 
-    var ctx = canvas.getContext('2d')
-    var animationId
-    var stars = []
-    var shootingStars = []
-    var STAR_COUNT = 200
-    var SHOOTING_COUNT = 3
+    const ctx = canvas.getContext('2d')
+    let animationId
+    const stars = []
+    const shootingStars = []
+    const STAR_COUNT = 200
+    const SHOOTING_COUNT = 3
 
-    function resize() {
-      var dpr = Math.min(window.devicePixelRatio || 1, 2)
-      var rect = canvas.getBoundingClientRect()
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const rect = canvas.getBoundingClientRect()
       canvas.width = rect.width * dpr
       canvas.height = rect.height * dpr
       canvas.style.width = rect.width + 'px'
@@ -963,121 +941,125 @@ const useStarfieldCanvas = function(canvasRef) {
     resize()
     window.addEventListener('resize', resize)
 
-    function Star(w, h) {
-      this.w = w
-      this.h = h
-      this.x = Math.random() * w
-      this.y = Math.random() * h
-      this.size = Math.random() * 2.2 + 0.4
-      this.baseOpacity = Math.random() * 0.65 + 0.25
-      this.twinkleSpeed = Math.random() * 0.018 + 0.004
-      this.twinkleOffset = Math.random() * Math.PI * 2
-      this.driftX = (Math.random() - 0.5) * 0.15
-      this.driftY = (Math.random() - 0.5) * 0.1
-      var colors = ['#ffffff', '#A78BFA', '#C4B5FD', '#22D3EE', '#E0E7FF', '#DDD6FE']
-      this.color = colors[Math.floor(Math.random() * colors.length)]
-    }
+    class Star {
+      constructor(w, h) {
+        this.w = w
+        this.h = h
+        this.x = Math.random() * w
+        this.y = Math.random() * h
+        this.size = Math.random() * 2.2 + 0.4
+        this.baseOpacity = Math.random() * 0.65 + 0.25
+        this.twinkleSpeed = Math.random() * 0.018 + 0.004
+        this.twinkleOffset = Math.random() * Math.PI * 2
+        this.driftX = (Math.random() - 0.5) * 0.15
+        this.driftY = (Math.random() - 0.5) * 0.1
+        const colors = ['#ffffff', '#A78BFA', '#C4B5FD', '#22D3EE', '#E0E7FF', '#DDD6FE']
+        this.color = colors[Math.floor(Math.random() * colors.length)]
+      }
 
-    Star.prototype.draw = function(ctx, time) {
-      this.x += this.driftX
-      this.y += this.driftY
-      if (this.x < -10) this.x = this.w + 10
-      if (this.x > this.w + 10) this.x = -10
-      if (this.y < -10) this.y = this.h + 10
-      if (this.y > this.h + 10) this.y = -10
+      draw(ctx, time) {
+        this.x += this.driftX
+        this.y += this.driftY
+        if (this.x < -10) this.x = this.w + 10
+        if (this.x > this.w + 10) this.x = -10
+        if (this.y < -10) this.y = this.h + 10
+        if (this.y > this.h + 10) this.y = -10
 
-      var twinkle = Math.sin(time * this.twinkleSpeed + this.twinkleOffset) * 0.35 + 0.65
-      var alpha = this.baseOpacity * twinkle
+        const twinkle = Math.sin(time * this.twinkleSpeed + this.twinkleOffset) * 0.35 + 0.65
+        const alpha = this.baseOpacity * twinkle
 
-      ctx.beginPath()
-      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
-      ctx.fillStyle = this.color
-      ctx.globalAlpha = alpha
-      ctx.fill()
-
-      if (this.size > 1.3) {
-        var glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 8)
-        glow.addColorStop(0, this.color)
-        glow.addColorStop(1, 'transparent')
-        ctx.fillStyle = glow
-        ctx.globalAlpha = alpha * 0.25
+        ctx.beginPath()
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
+        ctx.fillStyle = this.color
+        ctx.globalAlpha = alpha
         ctx.fill()
+
+        if (this.size > 1.3) {
+          const glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 8)
+          glow.addColorStop(0, this.color)
+          glow.addColorStop(1, 'transparent')
+          ctx.fillStyle = glow
+          ctx.globalAlpha = alpha * 0.25
+          ctx.fill()
+        }
+        ctx.globalAlpha = 1
       }
-      ctx.globalAlpha = 1
     }
 
-    function ShootingStar(w, h) {
-      this.w = w
-      this.h = h
-      this.reset()
-    }
-
-    ShootingStar.prototype.reset = function() {
-      this.x = Math.random() * this.w * 0.6 + this.w * 0.2
-      this.y = Math.random() * this.h * 0.3
-      this.length = Math.random() * 70 + 40
-      this.speed = Math.random() * 7 + 5
-      this.opacity = 0
-      this.fadingIn = true
-      this.angle = Math.PI * 0.35 + (Math.random() - 0.5) * 0.3
-    }
-
-    ShootingStar.prototype.update = function() {
-      if (this.fadingIn) {
-        this.opacity += 0.025
-        if (this.opacity >= 0.9) this.fadingIn = false
-      } else {
-        this.opacity -= 0.008
-      }
-      this.x += Math.cos(this.angle) * this.speed
-      this.y += Math.sin(this.angle) * this.speed
-      if (this.opacity <= 0 || this.x > this.w + 100 || this.y > this.h + 100) {
+    class ShootingStar {
+      constructor(w, h) {
+        this.w = w
+        this.h = h
         this.reset()
       }
+
+      reset() {
+        this.x = Math.random() * this.w * 0.6 + this.w * 0.2
+        this.y = Math.random() * this.h * 0.3
+        this.length = Math.random() * 70 + 40
+        this.speed = Math.random() * 7 + 5
+        this.opacity = 0
+        this.fadingIn = true
+        this.angle = Math.PI * 0.35 + (Math.random() - 0.5) * 0.3
+      }
+
+      update() {
+        if (this.fadingIn) {
+          this.opacity += 0.025
+          if (this.opacity >= 0.9) this.fadingIn = false
+        } else {
+          this.opacity -= 0.008
+        }
+        this.x += Math.cos(this.angle) * this.speed
+        this.y += Math.sin(this.angle) * this.speed
+        if (this.opacity <= 0 || this.x > this.w + 100 || this.y > this.h + 100) {
+          this.reset()
+        }
+      }
+
+      draw(ctx) {
+        if (this.opacity <= 0.01) return
+        const endX = this.x - Math.cos(this.angle) * this.length
+        const endY = this.y - Math.sin(this.angle) * this.length
+        const gradient = ctx.createLinearGradient(this.x, this.y, endX, endY)
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${this.opacity})`)
+        gradient.addColorStop(0.5, `rgba(167, 139, 250, ${this.opacity * 0.5})`)
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+        ctx.beginPath()
+        ctx.moveTo(this.x, this.y)
+        ctx.lineTo(endX, endY)
+        ctx.strokeStyle = gradient
+        ctx.lineWidth = 1.5
+        ctx.globalAlpha = this.opacity
+        ctx.stroke()
+        ctx.globalAlpha = 1
+      }
     }
 
-    ShootingStar.prototype.draw = function(ctx) {
-      if (this.opacity <= 0.01) return
-      var endX = this.x - Math.cos(this.angle) * this.length
-      var endY = this.y - Math.sin(this.angle) * this.length
-      var gradient = ctx.createLinearGradient(this.x, this.y, endX, endY)
-      gradient.addColorStop(0, 'rgba(255, 255, 255, ' + this.opacity + ')')
-      gradient.addColorStop(0.5, 'rgba(167, 139, 250, ' + (this.opacity * 0.5) + ')')
-      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
-      ctx.beginPath()
-      ctx.moveTo(this.x, this.y)
-      ctx.lineTo(endX, endY)
-      ctx.strokeStyle = gradient
-      ctx.lineWidth = 1.5
-      ctx.globalAlpha = this.opacity
-      ctx.stroke()
-      ctx.globalAlpha = 1
-    }
-
-    function init() {
-      var w = canvas.width / Math.min(window.devicePixelRatio || 1, 2)
-      var h = canvas.height / Math.min(window.devicePixelRatio || 1, 2)
-      stars = []
-      shootingStars = []
-      for (var i = 0; i < STAR_COUNT; i++) {
+    const init = () => {
+      const w = canvas.width / Math.min(window.devicePixelRatio || 1, 2)
+      const h = canvas.height / Math.min(window.devicePixelRatio || 1, 2)
+      stars.length = 0
+      shootingStars.length = 0
+      for (let i = 0; i < STAR_COUNT; i++) {
         stars.push(new Star(w, h))
       }
-      for (var j = 0; j < SHOOTING_COUNT; j++) {
+      for (let j = 0; j < SHOOTING_COUNT; j++) {
         shootingStars.push(new ShootingStar(w, h))
       }
     }
 
     init()
 
-    function animate(timestamp) {
-      var w = canvas.width / Math.min(window.devicePixelRatio || 1, 2)
-      var h = canvas.height / Math.min(window.devicePixelRatio || 1, 2)
-      var time = timestamp * 0.001
+    const animate = (timestamp) => {
+      const w = canvas.width / Math.min(window.devicePixelRatio || 1, 2)
+      const h = canvas.height / Math.min(window.devicePixelRatio || 1, 2)
+      const time = timestamp * 0.001
       ctx.clearRect(0, 0, w, h)
-      for (var i = 0; i < stars.length; i++) {
+      for (let i = 0; i < stars.length; i++) {
         stars[i].draw(ctx, time)
       }
-      for (var j = 0; j < shootingStars.length; j++) {
+      for (let j = 0; j < shootingStars.length; j++) {
         shootingStars[j].update()
         shootingStars[j].draw(ctx)
       }
@@ -1086,28 +1068,23 @@ const useStarfieldCanvas = function(canvasRef) {
 
     animationId = requestAnimationFrame(animate)
 
-    return function() {
+    return () => {
       cancelAnimationFrame(animationId)
       window.removeEventListener('resize', resize)
-      stars = []
-      shootingStars = []
     }
   }, [canvasRef])
 }
 
-var StarfieldCanvas = function() {
-  var ref = useRef(null)
-  useStarfieldCanvas(ref)
-  return React.createElement('canvas', {
-    ref: ref,
-    className: 'starfield-canvas'
-  })
+function StarfieldCanvas() {
+  const ref = useRef(null)
+  useStarfield(ref)
+  return <canvas ref={ref} className="starfield-canvas" />
 }
 
-var CosmicDust = function() {
-  var particles = useMemo(function() {
-    var arr = []
-    for (var i = 0; i < 25; i++) {
+function CosmicDust() {
+  const particles = useMemo(() => {
+    const arr = []
+    for (let i = 0; i < 25; i++) {
       arr.push({
         id: i,
         left: Math.random() * 100 + '%',
@@ -1121,245 +1098,249 @@ var CosmicDust = function() {
     return arr
   }, [])
 
-  return React.createElement('div', { style: { position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' } },
-    particles.map(function(p) {
-      return React.createElement('div', {
-        key: p.id,
-        className: 'dust-particle',
-        style: {
-          left: p.left,
-          top: p.top,
-          width: p.size,
-          height: p.size,
-          animationDuration: p.duration,
-          animationDelay: p.delay,
-          '--drift': p.drift
-        }
-      })
-    })
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+      {particles.map(p => (
+        <div
+          key={p.id}
+          className="dust-particle"
+          style={{
+            left: p.left,
+            top: p.top,
+            width: p.size,
+            height: p.size,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+            '--drift': p.drift
+          }}
+        />
+      ))}
+    </div>
   )
 }
 
 export default function Login() {
-  var _useState = useState(''), email = _useState[0], setEmail = _useState[1]
-  var _useState2 = useState(''), password = _useState2[0], setPassword = _useState2[1]
-  var _useState3 = useState(''), error = _useState3[0], setError = _useState3[1]
-  var _useState4 = useState(false), loading = _useState4[0], setLoading = _useState4[1]
-  var _useState5 = useState(false), remember = _useState5[0], setRemember = _useState5[1]
-  var _useState6 = useState(false), showPass = _useState6[0], setShowPass = _useState6[1]
-  var login = useAuth().login
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [remember, setRemember] = useState(false)
+  const [showPass, setShowPass] = useState(false)
+  const { login } = useAuth()
 
-  useEffect(function() {
+  useEffect(() => {
     if (!document.getElementById('deep-nebula-styles')) {
-      var el = document.createElement('style')
+      const el = document.createElement('style')
       el.id = 'deep-nebula-styles'
       el.textContent = STYLES
       document.head.appendChild(el)
     }
-    return function() {
-      var el = document.getElementById('deep-nebula-styles')
+    return () => {
+      const el = document.getElementById('deep-nebula-styles')
       if (el) el.remove()
     }
   }, [])
 
-  useEffect(function() {
+  useEffect(() => {
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
   }, [])
 
-  var handleSubmit = useCallback(async function(e) {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
     try {
-      var response = await api.post('/auth/login', { email: email, password: password })
-      var data = response.data
+      const response = await api.post('/auth/login', { email, password })
+      const data = response.data
       login(
         { id: data.id, email: data.email, fullName: data.fullName, role: data.role },
         data.token
       )
     } catch (err) {
-      var message = 'Invalid email or password. Please try again.'
-      if (err.response && err.response.data && err.response.data.message) {
-        message = err.response.data.message
-      }
+      const message = err.response?.data?.message || 'Invalid email or password. Please try again.'
       setError(message)
       setLoading(false)
     }
   }, [email, password, login])
 
-  var togglePassword = useCallback(function() {
-    setShowPass(function(prev) { return !prev })
+  const togglePassword = useCallback(() => {
+    setShowPass(prev => !prev)
   }, [])
 
-  var toggleRemember = useCallback(function() {
-    setRemember(function(prev) { return !prev })
+  const toggleRemember = useCallback(() => {
+    setRemember(prev => !prev)
   }, [])
 
-  var trustItems = useMemo(function() {
+  const trustItems = useMemo(() => {
     return ['Enterprise Grade', 'SOC2 Compliant', '256-bit Encryption']
   }, [])
 
-  return React.createElement('div', { className: 'cosmic-viewport' },
-    React.createElement('div', { className: 'nebula-layer' }),
-    React.createElement('div', { className: 'cosmic-grid' }),
-    React.createElement(StarfieldCanvas),
-    React.createElement(CosmicDust),
-    React.createElement('div', { className: 'cosmic-orb orb-1' }),
-    React.createElement('div', { className: 'cosmic-orb orb-2' }),
-    React.createElement('div', { className: 'cosmic-orb orb-3' }),
-    React.createElement('div', { className: 'cosmic-orb orb-4' }),
-    React.createElement('div', { className: 'ring-system' },
-      React.createElement('div', { className: 'orbital-ring ring-1' }, React.createElement('div', { className: 'ring-dot' })),
-      React.createElement('div', { className: 'orbital-ring ring-2' }, React.createElement('div', { className: 'ring-dot' })),
-      React.createElement('div', { className: 'orbital-ring ring-3' }, React.createElement('div', { className: 'ring-dot' }))
-    ),
-    React.createElement('div', { className: 'shooting-star shoot-1' }),
-    React.createElement('div', { className: 'shooting-star shoot-2' }),
-    React.createElement('div', { className: 'shooting-star shoot-3' }),
-    React.createElement('div', { className: 'vignette' }),
-    React.createElement('div', { className: 'scanlines' }),
+  return (
+    <div className="cosmic-viewport">
+      <div className="nebula-layer" />
+      <div className="cosmic-grid" />
+      <StarfieldCanvas />
+      <CosmicDust />
+      <div className="cosmic-orb orb-1" />
+      <div className="cosmic-orb orb-2" />
+      <div className="cosmic-orb orb-3" />
+      <div className="cosmic-orb orb-4" />
+      <div className="ring-system">
+        <div className="orbital-ring ring-1"><div className="ring-dot" /></div>
+        <div className="orbital-ring ring-2"><div className="ring-dot" /></div>
+        <div className="orbital-ring ring-3"><div className="ring-dot" /></div>
+      </div>
+      <div className="shooting-star shoot-1" />
+      <div className="shooting-star shoot-2" />
+      <div className="shooting-star shoot-3" />
+      <div className="vignette" />
+      <div className="scanlines" />
 
-    React.createElement('div', { className: 'login-stage' },
-      React.createElement('div', { className: 'auth-panel' },
-        React.createElement('div', { className: 'card-inner-glow' }),
-        React.createElement('div', { className: 'panel-content' },
-          React.createElement('div', { className: 'brand-block' },
-            React.createElement('div', { className: 'logo-emblem' },
-              React.createElement('div', { className: 'logo-orbit' }),
-              React.createElement('div', { className: 'emblem-core' },
-                React.createElement('svg', { width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none' },
-                  React.createElement('path', { d: 'M12 2L14.5 7.5L20 8L16 12.5L17 18L12 15L7 18L8 12.5L4 8L9.5 7.5L12 2Z', fill: 'white', opacity: '0.9' })
-                )
-              )
-            ),
-            React.createElement('h1', { className: 'brand-title' },
-              'Interview',
-              React.createElement('span', { className: 'brand-accent' }, 'AI')
-            ),
-            React.createElement('p', { className: 'brand-subtitle' }, 'Welcome back to your dashboard')
-          ),
+      <div className="login-stage">
+        <div className="auth-panel">
+          <div className="card-inner-glow" />
+          <div className="panel-content">
+            <div className="brand-block">
+              <div className="logo-emblem">
+                <div className="logo-orbit" />
+                <div className="emblem-core">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L14.5 7.5L20 8L16 12.5L17 18L12 15L7 18L8 12.5L4 8L9.5 7.5L12 2Z" fill="white" opacity="0.9" />
+                  </svg>
+                </div>
+              </div>
+              <h1 className="brand-title">
+                Interview<span className="brand-accent">AI</span>
+              </h1>
+              <p className="brand-subtitle">Welcome back to your dashboard</p>
+            </div>
 
-          React.createElement('form', { className: 'auth-form', onSubmit: handleSubmit, autoComplete: 'off' },
-            React.createElement('div', { className: 'field-group' },
-              React.createElement('label', { className: 'field-label' },
-                React.createElement('svg', { className: 'label-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
-                  React.createElement('rect', { x: '2', y: '4', width: '20', height: '16', rx: '2' }),
-                  React.createElement('path', { d: 'M22 7L13 13L4 7' })
-                ),
-                'Email Address'
-              ),
-              React.createElement('input', {
-                type: 'email',
-                className: 'form-input',
-                placeholder: 'you@example.com',
-                value: email,
-                onChange: function(e) { setEmail(e.target.value) },
-                required: true,
-                autoComplete: 'email'
-              })
-            ),
+            <form className="auth-form" onSubmit={handleSubmit} autoComplete="off">
+              <div className="field-group">
+                <label className="field-label">
+                  <svg className="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M22 7L13 13L4 7" />
+                  </svg>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  className="form-input"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
 
-            React.createElement('div', { className: 'field-group' },
-              React.createElement('label', { className: 'field-label' },
-                React.createElement('svg', { className: 'label-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
-                  React.createElement('rect', { x: '3', y: '11', width: '18', height: '11', rx: '2' }),
-                  React.createElement('circle', { cx: '12', cy: '16', r: '1' }),
-                  React.createElement('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' })
-                ),
-                'Password'
-              ),
-              React.createElement('div', { className: 'input-container' },
-                React.createElement('input', {
-                  type: showPass ? 'text' : 'password',
-                  className: 'form-input input-has-icon',
-                  placeholder: '••••••••',
-                  value: password,
-                  onChange: function(e) { setPassword(e.target.value) },
-                  required: true,
-                  autoComplete: 'current-password'
-                }),
-                React.createElement('button', {
-                  type: 'button',
-                  className: 'password-toggle',
-                  onClick: togglePassword,
-                  tabIndex: -1,
-                  'aria-label': showPass ? 'Hide password' : 'Show password'
-                },
-                  showPass ?
-                    React.createElement('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
-                      React.createElement('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' }),
-                      React.createElement('circle', { cx: '12', cy: '12', r: '3' })
-                    ) :
-                    React.createElement('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '1.8' },
-                      React.createElement('path', { d: 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94' }),
-                      React.createElement('path', { d: 'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19' }),
-                      React.createElement('line', { x1: '1', y1: '1', x2: '23', y2: '23' })
-                    )
-                )
-              )
-            ),
+              <div className="field-group">
+                <label className="field-label">
+                  <svg className="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <circle cx="12" cy="16" r="1" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  Password
+                </label>
+                <div className="input-container">
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    className="form-input input-has-icon"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={togglePassword}
+                    tabIndex={-1}
+                    aria-label={showPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showPass ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-            React.createElement('div', { className: 'actions-row' },
-              React.createElement('div', { className: 'remember-wrap', onClick: toggleRemember },
-                React.createElement('div', { className: 'custom-checkbox' + (remember ? ' checked' : '') },
-                  remember && React.createElement('svg', { width: '11', height: '9', viewBox: '0 0 11 9', fill: 'none', stroke: 'white', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round' },
-                    React.createElement('path', { d: 'M1 4.5L4 7.5L10 1.5' })
-                  )
-                ),
-                React.createElement('span', { className: 'remember-label' }, 'Remember me')
-              ),
-              React.createElement('button', { type: 'button', className: 'forgot-btn' }, 'Forgot password?')
-            ),
+              <div className="actions-row">
+                <div className="remember-wrap" onClick={toggleRemember}>
+                  <div className={`custom-checkbox${remember ? ' checked' : ''}`}>
+                    {remember && (
+                      <svg width="11" height="9" viewBox="0 0 11 9" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 4.5L4 7.5L10 1.5" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="remember-label">Remember me</span>
+                </div>
+                <button type="button" className="forgot-btn">Forgot password?</button>
+              </div>
 
-            error && React.createElement('div', { className: 'error-block' },
-              React.createElement('svg', { className: 'error-icon-block', width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2' },
-                React.createElement('circle', { cx: '12', cy: '12', r: '10' }),
-                React.createElement('line', { x1: '12', y1: '8', x2: '12', y2: '12' }),
-                React.createElement('line', { x1: '12', y1: '16', x2: '12.01', y2: '16' })
-              ),
-              error
-            ),
+              {error && (
+                <div className="error-block">
+                  <svg className="error-icon-block" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  {error}
+                </div>
+              )}
 
-            React.createElement('button', { type: 'submit', className: 'submit-btn', disabled: loading },
-              React.createElement('div', { className: 'btn-inner' },
-                loading && React.createElement('div', { className: 'btn-spinner' }),
-                React.createElement('span', null, loading ? 'Signing in...' : 'Sign In')
-              )
-            )
-          ),
+              <button type="submit" className="submit-btn" disabled={loading}>
+                <div className="btn-inner">
+                  {loading && <div className="btn-spinner" />}
+                  <span>{loading ? 'Signing in...' : 'Sign In'}</span>
+                </div>
+              </button>
+            </form>
 
-          React.createElement('div', { className: 'divider-wrap' },
-            React.createElement('div', { className: 'divider-line' }),
-            React.createElement('span', { className: 'divider-text' }, 'or'),
-            React.createElement('div', { className: 'divider-line' })
-          ),
+            <div className="divider-wrap">
+              <div className="divider-line" />
+              <span className="divider-text">or</span>
+              <div className="divider-line" />
+            </div>
 
-          React.createElement('div', { className: 'register-wrap' },
-            React.createElement('span', { className: 'register-prompt' },
-              "Don't have an account?",
-              React.createElement(Link, { to: '/register', className: 'register-link' }, 'Create one')
-            )
-          ),
+            <div className="register-wrap">
+              <span className="register-prompt">
+                Don&apos;t have an account?
+                <Link to="/register" className="register-link">Create one</Link>
+              </span>
+            </div>
 
-          React.createElement('div', { className: 'trust-row' },
-            trustItems.map(function(item) {
-              return React.createElement('div', { key: item, className: 'trust-pill' },
-                React.createElement('span', { className: 'pill-dot' }),
-                item
-              )
-            })
-          ),
+            <div className="trust-row">
+              {trustItems.map((item) => (
+                <div key={item} className="trust-pill">
+                  <span className="pill-dot" />
+                  {item}
+                </div>
+              ))}
+            </div>
 
-          React.createElement('p', { className: 'legal-footer' },
-            'By signing in, you agree to our ',
-            React.createElement('span', { className: 'legal-link' }, 'Terms of Service'),
-            ' and ',
-            React.createElement('span', { className: 'legal-link' }, 'Privacy Policy'),
-            '.'
-          )
-        )
-      )
-    )
+            <p className="legal-footer">
+              By signing in, you agree to our{' '}
+              <span className="legal-link">Terms of Service</span> and{' '}
+              <span className="legal-link">Privacy Policy</span>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
