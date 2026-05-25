@@ -64,17 +64,16 @@ const STYLES = `
     overflow: hidden;
   }
 
-  /* ── Full-screen canvas ── */
   .canvas-3d-bg {
     position: fixed;
-    top: 0; left: 0;
-    width: 100vw;
-    height: 100vh;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     z-index: 0;
     pointer-events: none;
   }
 
-  /* ── Orbs: all four corners + centre ── */
   .bg-orb {
     position: fixed;
     border-radius: 50%;
@@ -140,11 +139,10 @@ const STYLES = `
     50% { transform: translate(-50%,-50%) scale(1.25); opacity: 0.7; }
   }
 
-  /* ── Full-screen grid ── */
   .bg-grid-pattern {
     position: fixed;
     top: 0; left: 0;
-    width: 100vw; height: 100vh;
+    width: 100%; height: 100%;
     pointer-events: none;
     z-index: 0;
     opacity: 0.18;
@@ -154,11 +152,10 @@ const STYLES = `
     background-size: 60px 60px;
   }
 
-  /* ── Floating shapes ── */
   .floating-shapes {
     position: fixed;
     top: 0; left: 0;
-    width: 100vw; height: 100vh;
+    width: 100%; height: 100%;
     pointer-events: none;
     z-index: 0;
     overflow: hidden;
@@ -179,7 +176,6 @@ const STYLES = `
     100% { transform: translateY(-10vh) translateX(var(--drift-x,50px)) rotate(var(--rotation,360deg)) scale(1.2); opacity: 0; }
   }
 
-  /* ── Diagonal light sweep ── */
   .light-sweep {
     position: fixed;
     top: -50%; left: -50%;
@@ -204,7 +200,6 @@ const STYLES = `
     80%     { opacity: 0; }
   }
 
-  /* ── Card ── */
   .login-container {
     position: relative;
     z-index: 10;
@@ -266,7 +261,6 @@ const STYLES = `
   .auth-card:hover .card-shine { opacity: 1; }
   .card-content { position: relative; z-index: 1; }
 
-  /* ── Brand ── */
   .brand-section { text-align: center; margin-bottom: 36px; }
 
   .logo-icon {
@@ -313,7 +307,6 @@ const STYLES = `
   @keyframes gradientShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
   .brand-tagline { font-size: 14px; color: var(--text-tertiary); font-weight: 400; }
 
-  /* ── Form ── */
   .form { display: flex; flex-direction: column; gap: 20px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field-label {
@@ -527,42 +520,23 @@ function use3DBackground(canvasRef) {
     const ctx = canvas.getContext('2d')
     let animationId
     const particles = []
-    const PARTICLE_COUNT = 80
-    const CONNECTION_DIST = 160
+    const PARTICLE_COUNT = 100
+    const CONNECTION_DIST = 150
     const MOUSE_RADIUS = 200
 
     let mouseX = -1000, mouseY = -1000
     let targetMouseX = -1000, targetMouseY = -1000
-
-    const getLogical = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      return { w: canvas.width / dpr, h: canvas.height / dpr }
-    }
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      canvas.width = window.innerWidth * dpr
-      canvas.height = window.innerHeight * dpr
-      canvas.style.width = window.innerWidth + 'px'
-      canvas.style.height = window.innerHeight + 'px'
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.scale(dpr, dpr)
-      init()
-    }
-
-    resize()
-    window.addEventListener('resize', resize)
-
-    const handleMouseMove = (e) => { targetMouseX = e.clientX; targetMouseY = e.clientY }
-    const handleMouseLeave = () => { targetMouseX = -1000; targetMouseY = -1000 }
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseleave', handleMouseLeave)
+    let currentWidth = window.innerWidth
+    let currentHeight = window.innerHeight
 
     class Particle {
-      constructor(w, h) { this.w = w; this.h = h; this.reset() }
-      reset() {
-        this.x = Math.random() * this.w
-        this.y = Math.random() * this.h
+      constructor() {
+        this.reset(true)
+      }
+
+      reset(initial = false) {
+        this.x = initial ? Math.random() * currentWidth : Math.random() * currentWidth
+        this.y = initial ? Math.random() * currentHeight : Math.random() * currentHeight
         this.z = Math.random() * 3 + 0.5
         this.baseRadius = Math.random() * 2.5 + 1.2
         this.speedX = (Math.random() - 0.5) * 0.5
@@ -570,22 +544,26 @@ function use3DBackground(canvasRef) {
         this.opacity = Math.random() * 0.4 + 0.12
         this.hue = Math.random() * 25 + 230
       }
+
       update() {
         this.x += this.speedX * this.z
         this.y += this.speedY * this.z
-        if (this.x < -60) this.x = this.w + 60
-        if (this.x > this.w + 60) this.x = -60
-        if (this.y < -60) this.y = this.h + 60
-        if (this.y > this.h + 60) this.y = -60
+        if (this.x < -60) this.x = currentWidth + 60
+        if (this.x > currentWidth + 60) this.x = -60
+        if (this.y < -60) this.y = currentHeight + 60
+        if (this.y > currentHeight + 60) this.y = -60
       }
+
       draw(ctx, time) {
         const r = this.baseRadius * this.z
         const pulse = Math.sin(time * 0.0015 + this.x * 0.008 + this.y * 0.008) * 0.2 + 0.8
         const alpha = this.opacity * pulse
+        
         ctx.beginPath()
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2)
         ctx.fillStyle = `hsla(${this.hue},78%,64%,${alpha})`
         ctx.fill()
+
         if (r > 1.6) {
           const glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 5)
           glow.addColorStop(0, `hsla(${this.hue},78%,64%,${alpha * 0.45})`)
@@ -598,20 +576,50 @@ function use3DBackground(canvasRef) {
       }
     }
 
-    function init() {
-      const { w, h } = getLogical()
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      currentWidth = window.innerWidth
+      currentHeight = window.innerHeight
+      canvas.width = currentWidth * dpr
+      canvas.height = currentHeight * dpr
+      canvas.style.width = currentWidth + 'px'
+      canvas.style.height = currentHeight + 'px'
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.scale(dpr, dpr)
+      
       particles.length = 0
-      for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle(w, h))
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push(new Particle())
+      }
     }
 
-    function animate(ts) {
-      const { w, h } = getLogical()
+    resize()
+    window.addEventListener('resize', resize)
+
+    const handleMouseMove = (e) => { 
+      targetMouseX = e.clientX
+      targetMouseY = e.clientY
+    }
+    const handleMouseLeave = () => { 
+      targetMouseX = -1000
+      targetMouseY = -1000
+    }
+    
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseleave', handleMouseLeave)
+
+    const animate = (ts) => {
       mouseX += (targetMouseX - mouseX) * 0.08
       mouseY += (targetMouseY - mouseY) * 0.08
-      ctx.clearRect(0, 0, w, h)
+      
+      ctx.clearRect(0, 0, currentWidth, currentHeight)
 
-      particles.forEach(p => { p.update(); p.draw(ctx, ts) })
+      particles.forEach(p => { 
+        p.update()
+        p.draw(ctx, ts) 
+      })
 
+      // Draw connections between nearby particles
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x
@@ -629,22 +637,35 @@ function use3DBackground(canvasRef) {
         }
       }
 
+      // Mouse interaction
       if (mouseX > 0 && mouseY > 0) {
         particles.forEach(p => {
-          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dx = p.x - mouseX
+          const dy = p.y - mouseY
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist < MOUSE_RADIUS) {
             const op = (1 - dist / MOUSE_RADIUS) * 0.22
-            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouseX, mouseY)
-            ctx.strokeStyle = `rgba(99,102,241,${op})`; ctx.lineWidth = 0.5; ctx.stroke()
+            ctx.beginPath()
+            ctx.moveTo(p.x, p.y)
+            ctx.lineTo(mouseX, mouseY)
+            ctx.strokeStyle = `rgba(99,102,241,${op})`
+            ctx.lineWidth = 0.5
+            ctx.stroke()
           }
         })
-        ctx.beginPath(); ctx.arc(mouseX, mouseY, 3.5, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(99,102,241,0.35)'; ctx.fill()
+        
+        ctx.beginPath()
+        ctx.arc(mouseX, mouseY, 3.5, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(99,102,241,0.35)'
+        ctx.fill()
+        
         const mg = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, MOUSE_RADIUS * 0.4)
-        mg.addColorStop(0, 'rgba(99,102,241,0.07)'); mg.addColorStop(1, 'transparent')
+        mg.addColorStop(0, 'rgba(99,102,241,0.07)')
+        mg.addColorStop(1, 'transparent')
         ctx.fillStyle = mg
-        ctx.beginPath(); ctx.arc(mouseX, mouseY, MOUSE_RADIUS * 0.4, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath()
+        ctx.arc(mouseX, mouseY, MOUSE_RADIUS * 0.4, 0, Math.PI * 2)
+        ctx.fill()
       }
 
       animationId = requestAnimationFrame(animate)
@@ -799,47 +820,18 @@ export default function Login() {
             <form className="form" onSubmit={handleSubmit} autoComplete="off">
               <div className="field">
                 <label className="field-label">Email address</label>
-                <input
-                  type="email"
-                  className="input"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                />
+                <input type="email" className="input" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
               </div>
 
               <div className="field">
                 <label className="field-label">Password</label>
                 <div className="input-wrap">
-                  <input
-                    type={showPass ? 'text' : 'password'}
-                    className="input input-padding-right"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowPass(prev => !prev)}
-                    tabIndex={-1}
-                    aria-label={showPass ? 'Hide password' : 'Show password'}
-                  >
+                  <input type={showPass ? 'text' : 'password'} className="input input-padding-right" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+                  <button type="button" className="toggle-password" onClick={() => setShowPass(prev => !prev)} tabIndex={-1} aria-label={showPass ? 'Hide password' : 'Show password'}>
                     {showPass ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                     ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                     )}
                   </button>
                 </div>
@@ -848,11 +840,7 @@ export default function Login() {
               <div className="row">
                 <div className="remember" onClick={() => setRemember(prev => !prev)}>
                   <div className={`checkbox${remember ? ' active' : ''}`}>
-                    {remember && (
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 4l3 3 5-6" />
-                      </svg>
-                    )}
+                    {remember && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4l3 3 5-6" /></svg>}
                   </div>
                   <span className="remember-text">Remember me</span>
                 </div>
@@ -861,11 +849,7 @@ export default function Login() {
 
               {error && (
                 <div className="error-box">
-                  <svg className="error-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
+                  <svg className="error-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                   {error}
                 </div>
               )}
@@ -876,33 +860,17 @@ export default function Login() {
               </button>
             </form>
 
-            <div className="divider">
-              <div className="divider-line" />
-              <span className="divider-text">or</span>
-              <div className="divider-line" />
-            </div>
+            <div className="divider"><div className="divider-line" /><span className="divider-text">or</span><div className="divider-line" /></div>
 
             <div className="register-row">
-              <span className="register-text">
-                Don&apos;t have an account?
-                <Link to="/register" className="register-link">Create one</Link>
-              </span>
+              <span className="register-text">Don&apos;t have an account?<Link to="/register" className="register-link">Create one</Link></span>
             </div>
 
             <div className="features">
-              {features.map((item) => (
-                <div key={item} className="feature-badge">
-                  <span className="badge-dot" />
-                  {item}
-                </div>
-              ))}
+              {features.map((item) => (<div key={item} className="feature-badge"><span className="badge-dot" />{item}</div>))}
             </div>
 
-            <p className="footer-text">
-              By signing in, you agree to our{' '}
-              <span className="footer-link">Terms of Service</span> and{' '}
-              <span className="footer-link">Privacy Policy</span>
-            </p>
+            <p className="footer-text">By signing in, you agree to our <span className="footer-link">Terms of Service</span> and <span className="footer-link">Privacy Policy</span></p>
           </div>
         </div>
       </div>
