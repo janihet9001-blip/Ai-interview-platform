@@ -269,4 +269,16 @@ public class InterviewWebSocketController {
 
         log.info("Warning sent to session: {} — action: {}", sessionId, action);
     }
+
+    @MessageMapping("/webrtc/offer")
+    public void handleWebRTCOffer(Map<String, Object> payload) {
+        String userId = payload.get("userId").toString();
+        messagingTemplate.convertAndSend("/topic/webrtc/offer/" + userId, payload);
+    }
+
+    @MessageMapping("/webrtc/answer")
+    public void handleWebRTCAnswer(Map<String, Object> payload) {
+        String userId = payload.get("userId").toString();
+        messagingTemplate.convertAndSend("/topic/webrtc/answer/" + userId, payload);
+    }
 }
