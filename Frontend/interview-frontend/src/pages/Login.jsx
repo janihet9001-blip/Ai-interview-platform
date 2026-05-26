@@ -1,749 +1,371 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
 
 const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
-  :root {
-    --bg-primary: #F8FAFC;
-    --bg-secondary: #FFFFFF;
-    --bg-tertiary: #F1F5F9;
-    --accent-50: #EEF2FF;
-    --accent-100: #E0E7FF;
-    --accent-200: #C7D2FE;
-    --accent-500: #6366F1;
-    --accent-600: #4F46E5;
-    --accent-700: #4338CA;
-    --text-primary: #0F172A;
-    --text-secondary: #334155;
-    --text-tertiary: #64748B;
-    --text-quaternary: #94A3B8;
-    --border-light: #E2E8F0;
-    --border-medium: #CBD5E1;
-    --border-focus: #818CF8;
-    --success: #10B981;
-    --success-bg: #ECFDF5;
-    --error: #EF4444;
-    --error-bg: #FEF2F2;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
-    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
-    --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
-    --shadow-3d: 0 20px 60px rgba(99,102,241,0.12), 0 8px 20px rgba(0,0,0,0.06);
-    --shadow-3d-hover: 0 30px 80px rgba(99,102,241,0.18), 0 12px 30px rgba(0,0,0,0.1);
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-    --radius-xl: 20px;
-    --transition-fast: 150ms ease;
-    --transition-base: 200ms ease;
-    --transition-smooth: 300ms cubic-bezier(0.4,0,0.2,1);
-    --transition-spring: 400ms cubic-bezier(0.34,1.56,0.64,1);
-  }
-
-  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-  html, body, #root {
-    width: 100%;
-    height: 100%;
-    background: var(--bg-primary);
-  }
-
-  .login-page {
-    min-height: 100vh;
-    width: 100vw;
+  .lp-page {
+    position: fixed !important;
+    inset: 0 !important;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #F0F4FF 0%, #EEF2FF 25%, #E8EDFF 50%, #EEF2FF 75%, #F0F4FF 100%);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    padding: 24px;
-    position: relative;
     overflow: hidden;
-  }
-
-  .canvas-3d-bg {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  .bg-orb {
-    position: fixed;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 0;
-    filter: blur(80px);
-  }
-
-  .bg-orb-tl {
-    width: 600px; height: 600px;
-    background: radial-gradient(circle, rgba(99,102,241,0.13) 0%, rgba(129,140,248,0.05) 45%, transparent 70%);
-    top: -200px; left: -150px;
-    animation: orbDrift1 11s ease-in-out infinite;
-  }
-  .bg-orb-tr {
-    width: 550px; height: 550px;
-    background: radial-gradient(circle, rgba(139,92,246,0.10) 0%, rgba(99,102,241,0.04) 45%, transparent 70%);
-    top: -180px; right: -150px;
-    animation: orbDrift2 13s ease-in-out infinite;
-  }
-  .bg-orb-bl {
-    width: 500px; height: 500px;
-    background: radial-gradient(circle, rgba(99,102,241,0.09) 0%, rgba(167,139,250,0.04) 45%, transparent 70%);
-    bottom: -180px; left: -120px;
-    animation: orbDrift3 15s ease-in-out infinite;
-  }
-  .bg-orb-br {
-    width: 520px; height: 520px;
-    background: radial-gradient(circle, rgba(129,140,248,0.10) 0%, rgba(99,102,241,0.04) 45%, transparent 70%);
-    bottom: -190px; right: -130px;
-    animation: orbDrift4 12s ease-in-out infinite;
-  }
-  .bg-orb-c {
-    width: 700px; height: 700px;
-    background: radial-gradient(circle, rgba(99,102,241,0.05) 0%, rgba(129,140,248,0.02) 45%, transparent 70%);
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    animation: orbPulse 8s ease-in-out infinite;
-  }
-
-  @keyframes orbDrift1 {
-    0%,100% { transform: translate(0,0) scale(1); }
-    33% { transform: translate(50px,40px) scale(1.15); }
-    66% { transform: translate(-20px,25px) scale(0.9); }
-  }
-  @keyframes orbDrift2 {
-    0%,100% { transform: translate(0,0) scale(1); }
-    33% { transform: translate(-45px,35px) scale(1.2); }
-    66% { transform: translate(25px,-20px) scale(0.85); }
-  }
-  @keyframes orbDrift3 {
-    0%,100% { transform: translate(0,0) scale(1); }
-    40% { transform: translate(40px,-35px) scale(1.1); }
-    70% { transform: translate(-15px,20px) scale(0.95); }
-  }
-  @keyframes orbDrift4 {
-    0%,100% { transform: translate(0,0) scale(1); }
-    35% { transform: translate(-35px,-30px) scale(1.18); }
-    65% { transform: translate(20px,25px) scale(0.88); }
-  }
-  @keyframes orbPulse {
-    0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 1; }
-    50% { transform: translate(-50%,-50%) scale(1.25); opacity: 0.7; }
-  }
-
-  .bg-grid-pattern {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.18;
-    background-image:
-      linear-gradient(rgba(99,102,241,0.07) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(99,102,241,0.07) 1px, transparent 1px);
-    background-size: 60px 60px;
-  }
-
-  .floating-shapes {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-  }
-
-  .float-shape {
-    position: absolute;
-    border-radius: 50%;
-    background: linear-gradient(135deg, rgba(99,102,241,0.09), rgba(129,140,248,0.04));
-    animation: shapeFloat linear infinite;
-  }
-
-  @keyframes shapeFloat {
-    0%   { transform: translateY(110vh) translateX(0) rotate(0deg) scale(0); opacity: 0; }
-    5%   { opacity: 0.5; }
-    50%  { opacity: 0.3; }
-    95%  { opacity: 0.05; }
-    100% { transform: translateY(-10vh) translateX(var(--drift-x,50px)) rotate(var(--rotation,360deg)) scale(1.2); opacity: 0; }
-  }
-
-  .light-sweep {
-    position: fixed;
-    top: -50%; left: -50%;
-    width: 200%; height: 200%;
-    background: linear-gradient(
-      115deg,
-      transparent 30%,
-      rgba(99,102,241,0.03) 45%,
-      rgba(129,140,248,0.05) 50%,
-      rgba(99,102,241,0.03) 55%,
-      transparent 70%
-    );
-    pointer-events: none;
-    z-index: 0;
-    animation: sweepAcross 10s ease-in-out infinite;
-  }
-
-  @keyframes sweepAcross {
-    0%,100% { transform: translateX(-60%) skewX(-15deg); opacity: 0; }
-    20%     { opacity: 1; }
-    50%     { transform: translateX(60%) skewX(-15deg); opacity: 1; }
-    80%     { opacity: 0; }
-  }
-
-  .login-container {
-    position: relative;
-    z-index: 10;
-    width: 100%;
-    max-width: 440px;
-    animation: cardEntry3D 0.9s cubic-bezier(0.16,1,0.3,1) both;
-    transform-style: preserve-3d;
-  }
-
-  @keyframes cardEntry3D {
-    from {
-      opacity: 0;
-      transform: translateY(50px) rotateX(14deg) rotateY(-6deg) scale(0.9);
-      filter: blur(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) rotateX(0) rotateY(0) scale(1);
-      filter: blur(0);
-    }
-  }
-
-  .auth-card {
-    background: rgba(255,255,255,0.94);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-xl);
-    padding: 44px 40px 36px;
-    box-shadow: var(--shadow-3d);
-    transform-style: preserve-3d;
-    transition: all var(--transition-smooth);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .auth-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent-500), var(--accent-200), transparent);
-    opacity: 0;
-    transition: opacity var(--transition-smooth);
-  }
-
-  .auth-card:hover { transform: translateY(-6px) rotateX(2deg); box-shadow: var(--shadow-3d-hover); border-color: var(--accent-200); }
-  .auth-card:hover::before { opacity: 1; }
-
-  .card-shine {
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at var(--mouse-x,50%) var(--mouse-y,50%), rgba(99,102,241,0.07) 0%, transparent 60%);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    background: #020816;
+    font-family: 'DM Sans', sans-serif;
     z-index: 0;
   }
-  .auth-card:hover .card-shine { opacity: 1; }
-  .card-content { position: relative; z-index: 1; }
-
-  .brand-section { text-align: center; margin-bottom: 36px; }
-
-  .logo-icon {
-    width: 52px; height: 52px;
-    margin: 0 auto 16px;
-    background: linear-gradient(135deg, #6366F1, #4F46E5);
-    border-radius: 16px;
+  .lp-vanta {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 0 !important;
+  }
+  .lp-particles {
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 1; overflow: hidden;
+  }
+  .lp-particle {
+    position: absolute; bottom: -10px; border-radius: 50%;
+    background: linear-gradient(135deg, #60a5fa, #06b6d4);
+    animation: lpRise linear infinite;
+  }
+  @keyframes lpRise {
+    0%   { transform: translateY(0) scale(1);       opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 0.5; }
+    100% { transform: translateY(-100vh) scale(0.5); opacity: 0; }
+  }
+  .lp-rings {
+    position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 6px 20px rgba(99,102,241,0.35);
-    transition: all var(--transition-spring);
-    cursor: pointer;
-    position: relative;
+    pointer-events: none; z-index: 1;
   }
-  .logo-icon::after {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border-radius: 20px;
-    border: 2px solid transparent;
-    border-top-color: rgba(99,102,241,0.35);
-    border-right-color: rgba(99,102,241,0.18);
-    animation: logoSpin 4s linear infinite;
+  .lp-ring {
+    position: absolute; border-radius: 50%;
+    border: 1px solid rgba(37,99,235,.20);
+    width: 80px; height: 80px;
+    animation: lpRing 11s ease-out infinite;
   }
-  @keyframes logoSpin { to { transform: rotate(360deg); } }
-  .logo-icon:hover { transform: scale(1.1) rotate(8deg); box-shadow: 0 10px 30px rgba(99,102,241,0.5); }
-  .logo-icon:active { transform: scale(0.95) rotate(0deg); transition: all 0.1s ease; }
-  .logo-icon svg { width: 28px; height: 28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
-
-  .brand-name {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    font-size: 28px; font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.5px;
-    margin-bottom: 4px;
+  @keyframes lpRing {
+    0%   { width: 80px;  height: 80px;  opacity: 0.7; }
+    100% { width: 900px; height: 900px; opacity: 0;   }
   }
-  .brand-accent {
-    background: linear-gradient(135deg, #6366F1, #818CF8, #6366F1);
-    background-size: 200% 200%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientShift 3s ease infinite;
+  .lp-top-badge {
+    position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 18px;
+    background: rgba(4,6,24,.78);
+    border: 1px solid rgba(96,165,250,.28); border-radius: 50px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 2px; color: rgba(120,190,255,.9);
+    white-space: nowrap; backdrop-filter: blur(12px); z-index: 10;
   }
-  @keyframes gradientShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-  .brand-tagline { font-size: 14px; color: var(--text-tertiary); font-weight: 400; }
-
-  .form { display: flex; flex-direction: column; gap: 20px; }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field-label {
-    font-size: 13px; font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: -0.1px;
-    transition: all var(--transition-fast);
+  .lp-badge-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #22c55e; box-shadow: 0 0 8px #22c55e;
+    flex-shrink: 0; animation: lpDot 1.8s ease-in-out infinite;
   }
-  .field:focus-within .field-label { color: var(--accent-500); transform: translateX(2px); }
-  .input-wrap { position: relative; }
-  .input {
-    width: 100%;
-    padding: 13px 16px;
-    background: var(--bg-primary);
-    border: 1.5px solid var(--border-light);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    font-family: 'Inter', sans-serif;
-    font-size: 14px; font-weight: 500;
-    outline: none;
-    transition: all var(--transition-base);
+  @keyframes lpDot {
+    0%,100% { opacity: 1; transform: scale(1);   }
+    50%      { opacity: .3; transform: scale(1.3); }
   }
-  .input::placeholder { color: var(--text-quaternary); font-weight: 400; }
-  .input:hover { border-color: var(--border-medium); box-shadow: var(--shadow-sm); }
-  .input:focus {
-    border-color: var(--border-focus);
-    background: var(--bg-secondary);
-    box-shadow: 0 0 0 4px rgba(99,102,241,0.07), 0 4px 12px rgba(99,102,241,0.1);
-    transform: translateY(-2px);
+  .lp-chip {
+    position: absolute; display: flex; flex-direction: column;
+    align-items: center; padding: 10px 16px;
+    background: rgba(4,8,36,.72);
+    border: 1px solid rgba(80,160,255,.22); border-radius: 14px;
+    backdrop-filter: blur(12px); z-index: 10;
+    animation: lpChip 5s ease-in-out infinite;
   }
-  .input-padding-right { padding-right: 44px; }
-
-  .toggle-password {
-    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-    background: none; border: none;
-    color: var(--text-quaternary);
-    cursor: pointer; padding: 8px; border-radius: 8px;
-    display: flex; align-items: center;
-    transition: all var(--transition-fast);
+  .lp-chip-v {
+    font-family: 'Syne', sans-serif; font-size: 18px;
+    font-weight: 800; color: #fff; line-height: 1;
   }
-  .toggle-password:hover { color: var(--accent-500); background: var(--accent-50); }
-  .toggle-password:active { transform: translateY(-50%) scale(0.85); }
-
-  .row { display: flex; align-items: center; justify-content: space-between; }
-  .remember { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-  .checkbox {
-    width: 20px; height: 20px;
-    border: 2px solid var(--border-medium);
-    border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    transition: all var(--transition-spring);
-    flex-shrink: 0;
-    background: var(--bg-primary);
+  .lp-chip-l {
+    font-size: 9.5px; color: rgba(96,165,250,.82); font-weight: 600;
+    letter-spacing: .5px; margin-top: 3px;
+    font-family: 'JetBrains Mono', monospace;
   }
-  .checkbox.active {
-    background: linear-gradient(135deg, #6366F1, #4F46E5);
-    border-color: transparent;
-    box-shadow: 0 0 0 4px rgba(99,102,241,0.12);
-    transform: scale(1.1);
+  .lp-chip-a { top: 18%; left: 5%;  animation-delay: 0s;   }
+  .lp-chip-b { top: 18%; right: 5%; animation-delay: 1.6s; }
+  .lp-chip-c { bottom: 22%; right: 5%; animation-delay: 3.2s; }
+  @keyframes lpChip {
+    0%,100% { transform: translateY(0);   }
+    50%      { transform: translateY(-8px); }
   }
-  .remember-text { font-size: 13px; color: var(--text-tertiary); font-weight: 500; transition: color var(--transition-fast); }
-  .remember:hover .remember-text { color: var(--text-secondary); }
-
-  .forgot-link {
-    background: none; border: none;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px; font-weight: 600;
-    color: var(--accent-500); cursor: pointer;
-    transition: all var(--transition-fast);
-    padding: 4px 8px; border-radius: 6px; position: relative;
+  .lp-card {
+    position: relative; z-index: 20;
+    width: 420px; max-width: 94vw;
+    max-height: 96vh; overflow-y: auto; scrollbar-width: none;
+    background: rgba(6,10,36,.75);
+    border: 1px solid rgba(80,140,255,.26); border-radius: 26px;
+    padding: 42px 38px 34px;
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    box-shadow:
+      0 0 0 1px rgba(80,160,255,.06),
+      0 8px 40px rgba(0,0,0,.7),
+      inset 0 0 80px rgba(37,99,235,.08),
+      0 32px 80px rgba(0,0,0,.4);
+    animation: lpCard .6s cubic-bezier(.22,1,.36,1) both;
+    transition: border-color .3s, box-shadow .3s;
   }
-  .forgot-link::after {
-    content: ''; position: absolute;
-    bottom: 0; left: 8px; right: 8px;
-    height: 1.5px; background: var(--accent-500);
-    transform: scaleX(0); transition: transform var(--transition-base);
+  .lp-card::-webkit-scrollbar { display: none; }
+  .lp-card:hover {
+    border-color: rgba(96,165,250,.38);
+    box-shadow:
+      0 0 0 1px rgba(80,160,255,.1),
+      0 8px 60px rgba(0,0,0,.75),
+      inset 0 0 100px rgba(37,99,235,.1),
+      0 0 60px rgba(59,130,246,.1);
   }
-  .forgot-link:hover { color: var(--accent-700); background: var(--accent-50); }
-  .forgot-link:hover::after { transform: scaleX(1); }
-
-  .error-box {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 16px;
-    background: var(--error-bg);
-    border: 1px solid rgba(239,68,68,0.25);
-    border-left: 3px solid var(--error);
-    border-radius: var(--radius-md);
-    color: var(--error);
-    font-size: 13px; font-weight: 500;
-    animation: errorShake 0.5s ease;
-    box-shadow: 0 2px 8px rgba(239,68,68,0.06);
+  @keyframes lpCard {
+    from { opacity:0; transform:translateY(28px) scale(.97); }
+    to   { opacity:1; transform:translateY(0)    scale(1);   }
   }
-  @keyframes errorShake {
-    0%,100% { transform: translateX(0); }
-    15% { transform: translateX(-8px); }
-    30% { transform: translateX(8px); }
-    45% { transform: translateX(-5px); }
-    60% { transform: translateX(5px); }
-    75% { transform: translateX(-2px); }
-    90% { transform: translateX(2px); }
+  .lp-card::before {
+    content:''; position:absolute; inset:0; border-radius:26px; padding:1px;
+    background: linear-gradient(125deg,
+      rgba(37,99,235,.4), rgba(96,165,250,.8),
+      rgba(139,92,246,.5), rgba(147,197,253,.85), rgba(37,99,235,.4));
+    background-size: 300% 300%;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    opacity:0; transition: opacity .45s;
+    animation: lpBorder 8s ease infinite; pointer-events:none;
   }
-  .error-icon { flex-shrink: 0; }
-
-  .submit-btn {
-    width: 100%; padding: 14px;
-    background: linear-gradient(135deg, #6366F1, #4F46E5);
-    border: none; border-radius: var(--radius-md);
-    color: white;
-    font-family: 'Inter', sans-serif;
-    font-size: 15px; font-weight: 600;
-    cursor: pointer;
-    transition: all var(--transition-smooth);
-    box-shadow: 0 4px 16px rgba(99,102,241,0.28);
-    display: flex; align-items: center; justify-content: center; gap: 10px;
-    letter-spacing: 0.3px;
-    position: relative; overflow: hidden;
+  .lp-card:hover::before { opacity:1; }
+  @keyframes lpBorder {
+    0%   { background-position: 0% 50%;   }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%;   }
   }
-  .submit-btn::before {
-    content: '';
-    position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
-    transition: left 0.7s ease;
+  .lp-shimmer {
+    position:absolute; top:0; left:12%; right:12%; height:1px;
+    background: linear-gradient(90deg, transparent, rgba(120,180,255,.75), rgba(180,130,255,.6), transparent);
+    border-radius:50%; pointer-events:none;
+    animation: lpShimmer 4s ease-in-out infinite;
   }
-  .submit-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #4F46E5, #4338CA);
-    box-shadow: 0 8px 30px rgba(99,102,241,0.42), 0 4px 12px rgba(0,0,0,0.1);
-    transform: translateY(-2px);
+  @keyframes lpShimmer { 0%,100%{opacity:.7} 50%{opacity:1} }
+  .lp-brand {
+    display:flex; align-items:center; gap:12px;
+    margin-bottom:28px; justify-content:center;
   }
-  .submit-btn:hover:not(:disabled)::before { left: 100%; }
-  .submit-btn:active:not(:disabled) { transform: translateY(0) scale(0.97); transition: all 0.1s ease; box-shadow: 0 2px 8px rgba(99,102,241,0.2); }
-  .submit-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
-
-  .spinner {
-    width: 18px; height: 18px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+  .lp-logo-box {
+    width:42px; height:42px;
+    background: linear-gradient(135deg,#2563eb,#06b6d4);
+    border-radius:12px; display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 0 20px rgba(37,99,235,.6); flex-shrink:0;
+    position:relative; overflow:hidden;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
-  .divider-line { flex: 1; height: 1px; background: var(--border-light); }
-  .divider-text { font-size: 12px; color: var(--text-quaternary); font-weight: 500; }
-
-  .register-row { text-align: center; margin-bottom: 20px; }
-  .register-text { font-size: 14px; color: var(--text-tertiary); }
-  .register-link {
-    color: var(--accent-500); font-weight: 600;
-    text-decoration: none; margin-left: 4px;
-    transition: all var(--transition-fast);
-    padding: 2px 6px; border-radius: 6px; position: relative;
+  .lp-logo-box::after {
+    content:''; position:absolute; top:-50%; left:-60%;
+    width:180%; height:180%;
+    background: linear-gradient(115deg, rgba(255,255,255,.22) 0%, transparent 70%);
+    transform: rotate(25deg);
+    animation: lpLogoShine 5s ease-in-out infinite;
   }
-  .register-link::after {
-    content: ''; position: absolute;
-    bottom: 0; left: 6px; right: 6px;
-    height: 1.5px; background: var(--accent-500);
-    transform: scaleX(0); transition: transform var(--transition-base);
+  @keyframes lpLogoShine {
+    0%   { transform: translateX(-100%) rotate(25deg); }
+    75%  { transform: translateX(80%)   rotate(25deg); }
+    100% { transform: translateX(180%)  rotate(25deg); }
   }
-  .register-link:hover { color: var(--accent-700); background: var(--accent-50); }
-  .register-link:hover::after { transform: scaleX(1); }
-
-  .features { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-  .feature-badge {
-    display: flex; align-items: center; gap: 6px;
-    padding: 7px 14px;
-    background: var(--accent-50);
-    border: 1px solid var(--accent-100);
-    border-radius: 100px;
-    font-size: 11px; color: var(--accent-600); font-weight: 600;
-    letter-spacing: 0.2px;
-    transition: all var(--transition-smooth);
-    cursor: default;
+  .lp-brand-name {
+    font-family:'Syne',sans-serif; font-size:20px;
+    font-weight:800; color:#fff; letter-spacing:-.3px;
   }
-  .feature-badge:hover { background: var(--accent-100); border-color: var(--accent-200); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99,102,241,0.12); }
-  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-500); flex-shrink: 0; box-shadow: 0 0 6px rgba(99,102,241,0.3); }
-
-  .footer-text { text-align: center; font-size: 12px; color: var(--text-quaternary); line-height: 1.6; }
-  .footer-link { color: var(--text-tertiary); cursor: pointer; font-weight: 500; transition: all var(--transition-fast); position: relative; }
-  .footer-link::after {
-    content: ''; position: absolute;
-    bottom: -1px; left: 0; right: 0;
-    height: 1px; background: var(--accent-500);
-    transform: scaleX(0); transition: transform var(--transition-base);
+  .lp-brand-name span { color:#60a5fa; }
+  .lp-h1 {
+    font-family:'Syne',sans-serif; font-size:27px; font-weight:800;
+    color:#fff; text-align:center; letter-spacing:-.5px; margin-bottom:6px;
   }
-  .footer-link:hover { color: var(--accent-500); }
-  .footer-link:hover::after { transform: scaleX(1); }
-
-  @media (max-width: 480px) {
-    .auth-card { padding: 32px 20px 28px; border-radius: var(--radius-lg); }
-    .brand-name { font-size: 24px; }
-    .login-container { padding: 0; }
-    .features { gap: 6px; }
-    .feature-badge { padding: 5px 10px; font-size: 10px; }
+  .lp-sub {
+    font-size:13px; color:rgba(148,163,184,.72); text-align:left;
+    margin-bottom:28px; padding-left:14px;
+    border-left:2.5px solid rgba(37,99,235,.6); line-height:1.5;
   }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
+  .lp-field { margin-bottom:16px; }
+  .lp-label {
+    display:flex; align-items:center; gap:7px;
+    font-size:11px; font-weight:600; color:rgba(148,163,184,.65);
+    letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;
+    font-family:'JetBrains Mono',monospace; transition:color .22s;
+  }
+  .lp-label svg { color:rgba(96,165,250,.6); flex-shrink:0; transition:color .22s; }
+  .lp-field-active .lp-label { color:rgba(96,165,250,.9); }
+  .lp-field-active .lp-label svg { color:#60a5fa; }
+  .lp-iw { position:relative; display:flex; align-items:center; }
+  .lp-input {
+    width:100%; padding:13px 16px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(80,140,255,.18); border-radius:11px;
+    color:#e2e8f0; font-family:'DM Sans',sans-serif; font-size:14px;
+    outline:none; transition:border-color .22s, box-shadow .22s, background .22s;
+  }
+  .lp-input::placeholder { color:rgba(100,116,139,.5); }
+  .lp-input:hover:not(:focus) {
+    border-color:rgba(80,140,255,.32); background:rgba(255,255,255,.06);
+  }
+  .lp-input:focus {
+    border-color:rgba(96,165,250,.6);
+    box-shadow:0 0 0 3px rgba(37,99,235,.15), 0 0 20px rgba(37,99,235,.08);
+    background:rgba(255,255,255,.07);
+  }
+  .lp-input-p { padding-right:44px; }
+  .lp-eye {
+    position:absolute; right:12px; background:none; border:none;
+    cursor:pointer; color:rgba(100,116,139,.65);
+    display:flex; align-items:center; padding:4px;
+    border-radius:6px; transition:color .15s, background .15s;
+  }
+  .lp-eye:hover { color:#60a5fa; background:rgba(96,165,250,.1); }
+  .lp-row {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:20px;
+  }
+  .lp-remember {
+    display:flex; align-items:center; gap:8px;
+    font-size:13px; color:rgba(148,163,184,.72);
+    cursor:pointer; user-select:none; transition:color .2s;
+  }
+  .lp-remember:hover { color:rgba(148,163,184,1); }
+  .lp-chk {
+    width:16px; height:16px;
+    border:1.5px solid rgba(80,140,255,.35); border-radius:5px;
+    background:rgba(255,255,255,.04);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; transition:all .2s;
+  }
+  .lp-chk-on {
+    background:#2563eb; border-color:#2563eb;
+    box-shadow:0 0 10px rgba(37,99,235,.5);
+  }
+  .lp-forgot {
+    background:none; border:none; font-family:'DM Sans',sans-serif;
+    font-size:13px; font-weight:600; color:#60a5fa;
+    cursor:pointer; transition:color .2s; padding:0;
+  }
+  .lp-forgot:hover { color:#93c5fd; }
+  .lp-error {
+    display:flex; align-items:center; gap:8px;
+    padding:11px 14px; background:rgba(239,68,68,.10);
+    border:1px solid rgba(239,68,68,.28); border-radius:10px;
+    color:#f87171; font-size:13px; margin-bottom:16px;
+    animation:lpErr .3s ease;
+  }
+  .lp-error svg { flex-shrink:0; }
+  @keyframes lpErr {
+    from { opacity:0; transform:translateY(-6px); }
+    to   { opacity:1; transform:translateY(0);    }
+  }
+  .lp-btn {
+    width:100%; padding:14px;
+    background:linear-gradient(135deg,#2563eb,#1d4ed8);
+    border:none; border-radius:11px; color:#fff;
+    font-family:'DM Sans',sans-serif; font-size:14.5px; font-weight:700;
+    letter-spacing:.2px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    position:relative; overflow:hidden;
+    box-shadow:0 4px 20px rgba(37,99,235,.5);
+    transition:transform .15s, box-shadow .15s;
+  }
+  .lp-btn::before {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(180deg,rgba(255,255,255,.1) 0%,transparent 55%);
+    border-radius:inherit; pointer-events:none;
+  }
+  .lp-btn::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);
+    transform:translateX(-100%); transition:transform .5s ease;
+  }
+  .lp-btn:hover::after { transform:translateX(100%); }
+  .lp-btn:hover:not(:disabled) {
+    transform:translateY(-2px);
+    box-shadow:0 8px 32px rgba(37,99,235,.65), 0 0 50px rgba(59,130,246,.15);
+  }
+  .lp-btn:active:not(:disabled) { transform:translateY(0); }
+  .lp-btn:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+  .lp-spinner {
+    width:16px; height:16px;
+    border:2.5px solid rgba(255,255,255,.3); border-top-color:#fff;
+    border-radius:50%; animation:lpSpin .65s linear infinite; flex-shrink:0;
+  }
+  @keyframes lpSpin { to { transform:rotate(360deg); } }
+  .lp-div {
+    position:relative; text-align:center; margin:20px 0;
+  }
+  .lp-div::before,.lp-div::after {
+    content:''; position:absolute; top:50%; height:1px;
+    width:calc(50% - 20px); background:rgba(80,140,255,.16);
+  }
+  .lp-div::before{left:0} .lp-div::after{right:0}
+  .lp-div span {
+    font-size:11px; color:rgba(100,116,139,.6);
+    padding:0 10px; font-family:'JetBrains Mono',monospace;
+  }
+  .lp-reg {
+    text-align:center; font-size:13px;
+    color:rgba(148,163,184,.65); margin-bottom:20px;
+  }
+  .lp-reg a { color:#60a5fa; font-weight:700; text-decoration:none; transition:color .2s; }
+  .lp-reg a:hover { color:#93c5fd; }
+  .lp-trust {
+    display:flex; justify-content:center; gap:8px;
+    flex-wrap:wrap; margin-bottom:14px;
+  }
+  .lp-tbadge {
+    display:flex; align-items:center; gap:5px;
+    padding:4px 10px;
+    background:rgba(37,99,235,.10);
+    border:1px solid rgba(37,99,235,.22); border-radius:50px;
+    font-size:10.5px; color:rgba(96,165,250,.85);
+    font-family:'JetBrains Mono',monospace; letter-spacing:.3px;
+    transition:background .2s, border-color .2s;
+  }
+  .lp-tbadge:hover {
+    background:rgba(37,99,235,.18); border-color:rgba(37,99,235,.4);
+  }
+  .lp-footer {
+    text-align:center; font-size:11.5px; color:rgba(100,116,139,.5);
+  }
+  .lp-footer span { color:rgba(96,165,250,.65); cursor:pointer; transition:color .2s; }
+  .lp-footer span:hover { color:#60a5fa; }
+  @media(max-width:500px){
+    .lp-card{width:92vw;padding:30px 20px 26px}
+    .lp-chip-a{top:10%;left:2%} .lp-chip-b{top:10%;right:2%} .lp-chip-c{display:none}
+    .lp-h1{font-size:22px}
   }
 `
 
-function use3DBackground(canvasRef) {
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext('2d')
-    let animationId
-    const particles = []
-    const PARTICLE_COUNT = 100
-    const CONNECTION_DIST = 150
-    const MOUSE_RADIUS = 200
-
-    let mouseX = -1000, mouseY = -1000
-    let targetMouseX = -1000, targetMouseY = -1000
-    let currentWidth = window.innerWidth
-    let currentHeight = window.innerHeight
-
-    class Particle {
-      constructor() {
-        this.reset(true)
-      }
-
-      reset(initial = false) {
-        this.x = initial ? Math.random() * currentWidth : Math.random() * currentWidth
-        this.y = initial ? Math.random() * currentHeight : Math.random() * currentHeight
-        this.z = Math.random() * 3 + 0.5
-        this.baseRadius = Math.random() * 2.5 + 1.2
-        this.speedX = (Math.random() - 0.5) * 0.5
-        this.speedY = (Math.random() - 0.5) * 0.35
-        this.opacity = Math.random() * 0.4 + 0.12
-        this.hue = Math.random() * 25 + 230
-      }
-
-      update() {
-        this.x += this.speedX * this.z
-        this.y += this.speedY * this.z
-        if (this.x < -60) this.x = currentWidth + 60
-        if (this.x > currentWidth + 60) this.x = -60
-        if (this.y < -60) this.y = currentHeight + 60
-        if (this.y > currentHeight + 60) this.y = -60
-      }
-
-      draw(ctx, time) {
-        const r = this.baseRadius * this.z
-        const pulse = Math.sin(time * 0.0015 + this.x * 0.008 + this.y * 0.008) * 0.2 + 0.8
-        const alpha = this.opacity * pulse
-        
-        ctx.beginPath()
-        ctx.arc(this.x, this.y, r, 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(${this.hue},78%,64%,${alpha})`
-        ctx.fill()
-
-        if (r > 1.6) {
-          const glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 5)
-          glow.addColorStop(0, `hsla(${this.hue},78%,64%,${alpha * 0.45})`)
-          glow.addColorStop(1, 'transparent')
-          ctx.fillStyle = glow
-          ctx.beginPath()
-          ctx.arc(this.x, this.y, r * 5, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      }
-    }
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      currentWidth = window.innerWidth
-      currentHeight = window.innerHeight
-      canvas.width = currentWidth * dpr
-      canvas.height = currentHeight * dpr
-      canvas.style.width = currentWidth + 'px'
-      canvas.style.height = currentHeight + 'px'
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.scale(dpr, dpr)
-      
-      particles.length = 0
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        particles.push(new Particle())
-      }
-    }
-
-    resize()
-    window.addEventListener('resize', resize)
-
-    const handleMouseMove = (e) => { 
-      targetMouseX = e.clientX
-      targetMouseY = e.clientY
-    }
-    const handleMouseLeave = () => { 
-      targetMouseX = -1000
-      targetMouseY = -1000
-    }
-    
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseleave', handleMouseLeave)
-
-    const animate = (ts) => {
-      mouseX += (targetMouseX - mouseX) * 0.08
-      mouseY += (targetMouseY - mouseY) * 0.08
-      
-      ctx.clearRect(0, 0, currentWidth, currentHeight)
-
-      particles.forEach(p => { 
-        p.update()
-        p.draw(ctx, ts) 
-      })
-
-      // Draw connections between nearby particles
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x
-          const dy = particles[i].y - particles[j].y
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < CONNECTION_DIST) {
-            const op = (1 - dist / CONNECTION_DIST) * 0.14
-            ctx.beginPath()
-            ctx.moveTo(particles[i].x, particles[i].y)
-            ctx.lineTo(particles[j].x, particles[j].y)
-            ctx.strokeStyle = `rgba(99,102,241,${op})`
-            ctx.lineWidth = 0.6
-            ctx.stroke()
-          }
-        }
-      }
-
-      // Mouse interaction
-      if (mouseX > 0 && mouseY > 0) {
-        particles.forEach(p => {
-          const dx = p.x - mouseX
-          const dy = p.y - mouseY
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < MOUSE_RADIUS) {
-            const op = (1 - dist / MOUSE_RADIUS) * 0.22
-            ctx.beginPath()
-            ctx.moveTo(p.x, p.y)
-            ctx.lineTo(mouseX, mouseY)
-            ctx.strokeStyle = `rgba(99,102,241,${op})`
-            ctx.lineWidth = 0.5
-            ctx.stroke()
-          }
-        })
-        
-        ctx.beginPath()
-        ctx.arc(mouseX, mouseY, 3.5, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(99,102,241,0.35)'
-        ctx.fill()
-        
-        const mg = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, MOUSE_RADIUS * 0.4)
-        mg.addColorStop(0, 'rgba(99,102,241,0.07)')
-        mg.addColorStop(1, 'transparent')
-        ctx.fillStyle = mg
-        ctx.beginPath()
-        ctx.arc(mouseX, mouseY, MOUSE_RADIUS * 0.4, 0, Math.PI * 2)
-        ctx.fill()
-      }
-
-      animationId = requestAnimationFrame(animate)
-    }
-
-    animationId = requestAnimationFrame(animate)
-
-    return () => {
-      cancelAnimationFrame(animationId)
-      window.removeEventListener('resize', resize)
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseleave', handleMouseLeave)
-    }
-  }, [canvasRef])
-}
-
-function Canvas3DBackground() {
-  const ref = useRef(null)
-  use3DBackground(ref)
-  return <canvas ref={ref} className="canvas-3d-bg" />
-}
-
-function FloatingShapes() {
-  const shapes = useMemo(() => {
-    const arr = []
-    for (let i = 0; i < 18; i++) {
-      arr.push({
-        id: i,
-        left: Math.random() * 100 + '%',
-        size: Math.random() * 45 + 12 + 'px',
-        duration: Math.random() * 22 + 14 + 's',
-        delay: -(Math.random() * 20) + 's',
-        driftX: (Math.random() - 0.5) * 140 + 'px',
-        rotation: Math.random() * 720 + 'deg',
-      })
-    }
-    return arr
-  }, [])
-
-  return (
-    <div className="floating-shapes">
-      {shapes.map(s => (
-        <div
-          key={s.id}
-          className="float-shape"
-          style={{
-            left: s.left,
-            width: s.size,
-            height: s.size,
-            animationDuration: s.duration,
-            animationDelay: s.delay,
-            '--drift-x': s.driftX,
-            '--rotation': s.rotation,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
   const [remember, setRemember] = useState(false)
   const [showPass, setShowPass] = useState(false)
-  const cardRef = useRef(null)
+  const [focused,  setFocused]  = useState('')
   const { login } = useAuth()
+  const vantaRef    = useRef(null)
+  const vantaEffect = useRef(null)
+  const styleRef    = useRef(null)
 
+  /* inject CSS once */
   useEffect(() => {
-    if (!document.getElementById('3d-login-styles')) {
+    if (!document.getElementById('lp-styles')) {
       const el = document.createElement('style')
-      el.id = '3d-login-styles'
+      el.id = 'lp-styles'
       el.textContent = STYLES
       document.head.appendChild(el)
+      styleRef.current = el
     }
-    return () => { document.getElementById('3d-login-styles')?.remove() }
+    return () => { document.getElementById('lp-styles')?.remove() }
   }, [])
 
   useEffect(() => {
@@ -751,128 +373,236 @@ export default function Login() {
     sessionStorage.removeItem('user')
   }, [])
 
-  const handleMouseMove = useCallback((e) => {
-    if (!cardRef.current) return
-    const rect = cardRef.current.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * 100
-    const y = ((e.clientY - rect.top) / rect.height) * 100
-    cardRef.current.style.setProperty('--mouse-x', x + '%')
-    cardRef.current.style.setProperty('--mouse-y', y + '%')
+  /* Vanta Globe */
+  useEffect(() => {
+    const loadScript = (src) =>
+      new Promise((resolve) => {
+        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+        const s = document.createElement('script')
+        s.src = src
+        s.onload = resolve
+        document.head.appendChild(s)
+      })
+
+    const init = async () => {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js')
+      await loadScript('https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js')
+      if (vantaRef.current && !vantaEffect.current && window.VANTA) {
+        vantaEffect.current = window.VANTA.GLOBE({
+          el: vantaRef.current,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200,
+          minWidth: 200,
+          scale: 1.0,
+          scaleMobile: 1.0,
+          color: 0x3b82f6,
+          color2: 0x60a5fa,
+          backgroundColor: 0x020816,
+          points: 14,
+          maxDistance: 22,
+          spacing: 18,
+        })
+      }
+    }
+
+    init()
+    return () => {
+      if (vantaEffect.current) { vantaEffect.current.destroy(); vantaEffect.current = null }
+    }
   }, [])
 
-  const handleMouseLeave = useCallback(() => {
-    if (!cardRef.current) return
-    cardRef.current.style.setProperty('--mouse-x', '50%')
-    cardRef.current.style.setProperty('--mouse-y', '50%')
-  }, [])
-
-  const handleSubmit = useCallback(async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
     try {
       const { data } = await api.post('/auth/login', { email, password })
-      login(
-        { id: data.id, email: data.email, fullName: data.fullName, role: data.role },
-        data.token
-      )
-    } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password. Please try again.')
+      login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
+    } catch {
+      setError('Invalid email or password')
       setLoading(false)
     }
-  }, [email, password, login])
+  }
 
-  const features = useMemo(() => ['SOC2 Compliant', '256-bit Encryption', '99.9% Uptime'], [])
+  const TRUST = ['End-to-end encrypted', 'Zero-trust secure', 'Premium AI']
 
   return (
-    <div className="login-page">
-      <Canvas3DBackground />
-      <div className="bg-orb bg-orb-tl" />
-      <div className="bg-orb bg-orb-tr" />
-      <div className="bg-orb bg-orb-bl" />
-      <div className="bg-orb bg-orb-br" />
-      <div className="bg-orb bg-orb-c" />
-      <div className="bg-grid-pattern" />
-      <div className="light-sweep" />
-      <FloatingShapes />
+    <div className="lp-page">
 
-      <div className="login-container">
-        <div
-          ref={cardRef}
-          className="auth-card"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        >
-          <div className="card-shine" />
-          <div className="card-content">
-            <div className="brand-section">
-              <div className="logo-icon">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L14.5 7.5L20 8L16 12.5L17 18L12 15L7 18L8 12.5L4 8L9.5 7.5L12 2Z" fill="white" />
-                </svg>
-              </div>
-              <h1 className="brand-name">
-                Interview<span className="brand-accent">AI</span>
-              </h1>
-              <p className="brand-tagline">Sign in to your account</p>
-            </div>
+      {/* Vanta Globe bg */}
+      <div ref={vantaRef} className="lp-vanta" />
 
-            <form className="form" onSubmit={handleSubmit} autoComplete="off">
-              <div className="field">
-                <label className="field-label">Email address</label>
-                <input type="email" className="input" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-              </div>
+      {/* Particles */}
+      <div className="lp-particles">
+        {Array.from({ length: 24 }).map((_, i) => (
+          <div key={i} className="lp-particle" style={{
+            left:              `${(i * 37 + 11) % 100}%`,
+            width:             `${(i % 3) + 2}px`,
+            height:            `${(i % 3) + 2}px`,
+            animationDuration: `${10 + (i % 7) * 2}s`,
+            animationDelay:    `${(i * 1.3) % 11}s`,
+            opacity:            0.25 + (i % 4) * 0.12,
+          }} />
+        ))}
+      </div>
 
-              <div className="field">
-                <label className="field-label">Password</label>
-                <div className="input-wrap">
-                  <input type={showPass ? 'text' : 'password'} className="input input-padding-right" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-                  <button type="button" className="toggle-password" onClick={() => setShowPass(prev => !prev)} tabIndex={-1} aria-label={showPass ? 'Hide password' : 'Show password'}>
-                    {showPass ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                    ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                    )}
-                  </button>
-                </div>
-              </div>
+      {/* Rings */}
+      <div className="lp-rings">
+        {[0, 2.5, 5, 7.5].map((d, i) => (
+          <div key={i} className="lp-ring" style={{ animationDelay: `${d}s` }} />
+        ))}
+      </div>
 
-              <div className="row">
-                <div className="remember" onClick={() => setRemember(prev => !prev)}>
-                  <div className={`checkbox${remember ? ' active' : ''}`}>
-                    {remember && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4l3 3 5-6" /></svg>}
-                  </div>
-                  <span className="remember-text">Remember me</span>
-                </div>
-                <button type="button" className="forgot-link">Forgot password?</button>
-              </div>
+      {/* Status badge */}
+      <div className="lp-top-badge">
+        <span className="lp-badge-dot" />
+        NEURAL NETWORK ACTIVE
+      </div>
 
-              {error && (
-                <div className="error-box">
-                  <svg className="error-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                  {error}
-                </div>
-              )}
+      {/* Stat chips */}
+      <div className="lp-chip lp-chip-a">
+        <span className="lp-chip-v">98%</span>
+        <span className="lp-chip-l">Accuracy</span>
+      </div>
+      <div className="lp-chip lp-chip-b">
+        <span className="lp-chip-v">2.4s</span>
+        <span className="lp-chip-l">Response</span>
+      </div>
+      <div className="lp-chip lp-chip-c">
+        <span className="lp-chip-v">50k+</span>
+        <span className="lp-chip-l">Interviews</span>
+      </div>
 
-              <button type="submit" className="submit-btn" disabled={loading}>
-                {loading && <div className="spinner" />}
-                {loading ? 'Signing in…' : 'Sign In'}
-              </button>
-            </form>
+      {/* Card */}
+      <div className="lp-card">
+        <div className="lp-shimmer" />
 
-            <div className="divider"><div className="divider-line" /><span className="divider-text">or</span><div className="divider-line" /></div>
-
-            <div className="register-row">
-              <span className="register-text">Don&apos;t have an account?<Link to="/register" className="register-link">Create one</Link></span>
-            </div>
-
-            <div className="features">
-              {features.map((item) => (<div key={item} className="feature-badge"><span className="badge-dot" />{item}</div>))}
-            </div>
-
-            <p className="footer-text">By signing in, you agree to our <span className="footer-link">Terms of Service</span> and <span className="footer-link">Privacy Policy</span></p>
+        {/* Brand */}
+        <div className="lp-brand">
+          <div className="lp-logo-box">
+            <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
+              <rect x="4" y="4" width="24" height="24" rx="6" stroke="white" strokeWidth="1.5"/>
+              <path d="M12 14L16 18L20 14" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+              <circle cx="16" cy="16" r="2.5" fill="white"/>
+            </svg>
           </div>
+          <span className="lp-brand-name">Interview<span>AI</span></span>
         </div>
+
+        <h1 className="lp-h1">Welcome back.</h1>
+        <p className="lp-sub">Secure access &bull; premium experience</p>
+
+        <form onSubmit={handleLogin} autoComplete="off">
+
+          {/* Email */}
+          <div className={`lp-field${focused === 'email' ? ' lp-field-active' : ''}`}>
+            <label className="lp-label">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <rect x="2" y="4" width="20" height="16" rx="3"/>
+                <path d="m2 7 10 7 10-7"/>
+              </svg>
+              Email address
+            </label>
+            <input
+              type="email" className="lp-input"
+              placeholder="you@example.com"
+              value={email} onChange={e => setEmail(e.target.value)}
+              onFocus={() => setFocused('email')} onBlur={() => setFocused('')}
+              required
+            />
+          </div>
+
+          {/* Password */}
+          <div className={`lp-field${focused === 'pass' ? ' lp-field-active' : ''}`}>
+            <label className="lp-label">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Password
+            </label>
+            <div className="lp-iw">
+              <input
+                type={showPass ? 'text' : 'password'}
+                className="lp-input lp-input-p"
+                placeholder="··········"
+                value={password} onChange={e => setPassword(e.target.value)}
+                onFocus={() => setFocused('pass')} onBlur={() => setFocused('')}
+                required
+              />
+              <button type="button" className="lp-eye" onClick={() => setShowPass(p => !p)} tabIndex={-1}>
+                {showPass ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Row */}
+          <div className="lp-row">
+            <label className="lp-remember" onClick={() => setRemember(p => !p)}>
+              <div className={`lp-chk${remember ? ' lp-chk-on' : ''}`}>
+                {remember && (
+                  <svg width="9" height="7" viewBox="0 0 10 8" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 4l2.5 2.5L9 1"/>
+                  </svg>
+                )}
+              </div>
+              Remember me
+            </label>
+            <button type="button" className="lp-forgot">Forgot password?</button>
+          </div>
+
+          {error && (
+            <div className="lp-error">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {error}
+            </div>
+          )}
+
+          <button type="submit" className="lp-btn" disabled={loading}>
+            {loading && <span className="lp-spinner" />}
+            {loading ? 'Signing in…' : 'Sign in to InterviewAI'}
+          </button>
+
+        </form>
+
+        <div className="lp-div"><span>or</span></div>
+
+        <p className="lp-reg">
+          No account yet? <Link to="/register">Create one free &rarr;</Link>
+        </p>
+
+        <div className="lp-trust">
+          {TRUST.map(label => (
+            <span key={label} className="lp-tbadge">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              {label}
+            </span>
+          ))}
+        </div>
+
+        <p className="lp-footer">
+          By signing in you agree to our{' '}
+          <span>Terms of Service</span> and <span>Privacy Policy</span>.
+        </p>
       </div>
     </div>
   )
