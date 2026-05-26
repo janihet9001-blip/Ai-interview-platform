@@ -1,4 +1,5 @@
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react'
+import PropTypes from 'prop-types'
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -7,17 +8,39 @@ function getToken() {
 }
 
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getToken()}`,
-      ...(options.headers || {}),
-    },
-  })
-  if (res.status === 204) return null
-  if (!res.ok) throw new Error(`API error ${res.status}`)
-  return res.json()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+  
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+        ...(options.headers || {}),
+      },
+      signal: controller.signal
+    })
+    
+    clearTimeout(timeoutId)
+    
+    if (res.status === 204) return null
+    if (res.status === 401) {
+      // Unauthorized - clear session and redirect
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('auth')
+      window.location.href = '/login'
+      throw new Error('Session expired. Please login again.')
+    }
+    if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`)
+    return res.json()
+  } catch (err) {
+    clearTimeout(timeoutId)
+    if (err.name === 'AbortError') {
+      throw new Error('Request timeout. Please try again.')
+    }
+    throw err
+  }
 }
 
 const pctColor = (pct) =>
@@ -36,6 +59,42 @@ const statusInfo = (scorePct) => {
 const initials = (name = '') =>
   name.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('')
 
+<<<<<<< HEAD
+=======
+const getAiRemark = (sessionId) => {
+  try {
+    const stored = localStorage.getItem(`interview_analysis_${sessionId}`)
+    if (!stored) return null
+    const qs = JSON.parse(stored).filter(
+      q => !q.isRecruiterQuestion && q.reason && !q.reason.includes('only available')
+    )
+    if (!qs.length) return null
+    const avg = (key) => {
+      const vals = qs.filter(q => q[key] != null)
+      if (!vals.length) return null
+      return Math.round(vals.reduce((a, q) => a + q[key], 0) / vals.length)
+    }
+    const suspicious = qs.filter(q => q.suspicious).length
+    const parts = []
+    const ac = avg('accuracy'), cf = avg('confidence'), au = avg('authenticity')
+    if (ac != null) parts.push(`${ac}% accuracy`)
+    if (cf != null) parts.push(`${cf}% confidence`)
+    if (au != null) parts.push(`${au}% authenticity`)
+    if (suspicious > 0) parts.push(`${suspicious} suspicious response${suspicious > 1 ? 's' : ''}`)
+    return parts.length ? parts.join(' · ') : null
+  } catch { 
+    return null 
+  }
+}
+
+// PropTypes for component
+CandidatesTab.propTypes = {
+  candidates: PropTypes.array.isRequired,
+  sessions: PropTypes.array.isRequired,
+  loading: PropTypes.bool,
+}
+
+>>>>>>> dd4a1be (Updated project)
 export default function CandidatesTab({ candidates, sessions = [], loading = false }) {
   const [openId, setOpenId] = useState(null)
   const [dbRemarks, setDbRemarks] = useState({})
@@ -46,12 +105,28 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [savingId, setSavingId] = useState(null)
+  const [error, setError] = useState(null)
+  const abortControllerRef = useRef(null)
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
 
   // Load all recruiter remarks from DB on mount
   useEffect(() => {
-    apiFetch('/recruiter/remarks/all')
-      .then((data) => {
+    let isMounted = true
+    
+    const loadRemarks = async () => {
+      try {
+        const data = await apiFetch('/recruiter/remarks/all')
+        if (!isMounted) return
         if (!data) return
+        
         const map = {}
         data.forEach((r) => {
           map[r.sessionId] = {
@@ -61,10 +136,23 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
           }
         })
         setDbRemarks(map)
-      })
-      .catch(console.error)
+        setError(null)
+      } catch (err) {
+        console.error('Failed to load remarks:', err)
+        if (isMounted) {
+          setError('Failed to load recruiter remarks. Please refresh.')
+        }
+      }
+    }
+    
+    loadRemarks()
+    
+    return () => {
+      isMounted = false
+    }
   }, [])
 
+<<<<<<< HEAD
   // ← NEW: Fetch AI remarks from API for completed sessions
   useEffect(() => {
     sessions.forEach(s => {
@@ -94,10 +182,15 @@ setApiRemarks(prev => ({
   }, [sessions])
 
   const saveRemark = async (sessionId, text, score) => {
+=======
+  const saveRemark = useCallback(async (sessionId, text, score) => {
+>>>>>>> dd4a1be (Updated project)
     const parsed = score !== '' ? parseInt(score) : null
     const scoreToSave = !isNaN(parsed) && parsed != null && parsed >= 0 && parsed <= 100 ? parsed : null
 
     setSavingId(sessionId)
+    setError(null)
+    
     try {
       const saved = await apiFetch('/recruiter/remark', {
         method: 'POST',
@@ -108,6 +201,7 @@ setApiRemarks(prev => ({
           status: statusInfo(scoreToSave).label,
         }),
       })
+      
       setDbRemarks((prev) => ({
         ...prev,
         [sessionId]: {
@@ -118,13 +212,13 @@ setApiRemarks(prev => ({
       }))
     } catch (e) {
       console.error('Failed to save remark:', e)
-      alert('Failed to save. Please try again.')
+      setError(`Failed to save: ${e.message}`)
     } finally {
       setSavingId(null)
     }
     setEditingRemark(null)
     setScoreDraft('')
-  }
+  }, [])
 
   const rows = useMemo(() => sessions.map(s => {
     const candidate = candidates.find(c => c.id === (s.userId || s.user?.id))
@@ -137,7 +231,7 @@ setApiRemarks(prev => ({
   }), [sessions, candidates, apiRemarks])  // ← added apiRemarks dependency
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase()
+    const q = search.toLowerCase().trim()
     return rows.filter(r => {
       const recScore = dbRemarks[r.session.id]?.recruiterScore ?? null
       const status = statusInfo(recScore)
@@ -161,8 +255,40 @@ setApiRemarks(prev => ({
     return count
   }, [rows, dbRemarks])
 
+  const handleSearchChange = useCallback((e) => {
+    setSearch(e.target.value)
+  }, [])
+
+  const clearSearch = useCallback(() => {
+    setSearch('')
+  }, [])
+
+  const handleFilterChange = useCallback((status) => {
+    setFilterStatus(status)
+  }, [])
+
+  const toggleExpand = useCallback((sessionId) => {
+    setOpenId(prev => prev === sessionId ? null : sessionId)
+  }, [])
+
+  const startEditing = useCallback((sessionId, currentRemark, currentScore) => {
+    setEditingRemark(sessionId)
+    setRemarkDraft(currentRemark)
+    setScoreDraft(currentScore != null ? String(currentScore) : '')
+  }, [])
+
+  const cancelEditing = useCallback(() => {
+    setEditingRemark(null)
+    setScoreDraft('')
+  }, [])
+
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '80px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+      <div style={{
+        width: '32px', height: '32px', border: '3px solid var(--border)',
+        borderTopColor: '#2563EB', borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite', margin: '0 auto 16px',
+      }} />
       Loading candidates...
     </div>
   )
@@ -179,9 +305,38 @@ setApiRemarks(prev => ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Error Display */}
+      {error && (
+        <div style={{
+          background: '#EF444415',
+          border: '1px solid #EF444440',
+          borderRadius: 'var(--radius)',
+          padding: '12px 16px',
+          fontSize: '13px',
+          color: '#F87171',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#F87171',
+              cursor: 'pointer',
+              fontSize: '16px',
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+<<<<<<< HEAD
           <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: 'var(--text-dim)', pointerEvents: 'none' }}>🔍</span>
           <input type="text" placeholder="Search by name, role or session ID..." value={search} onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', padding: '10px 34px 10px 34px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
@@ -193,6 +348,47 @@ setApiRemarks(prev => ({
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {['ALL', 'SELECTED', 'ON HOLD', 'NOT SELECTED', 'PENDING'].map(s => (
             <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '600', cursor: 'pointer', border: `1px solid ${filterStatus === s ? '#2563EB' : 'var(--border)'}`, background: filterStatus === s ? '#2563EB20' : 'var(--surface2)', color: filterStatus === s ? '#60A5FA' : 'var(--text-dim)', transition: 'all 0.15s' }}>
+=======
+          <span style={{
+            position: 'absolute', left: '12px', top: '50%',
+            transform: 'translateY(-50%)', fontSize: '13px',
+            color: 'var(--text-dim)', pointerEvents: 'none',
+          }}>🔍</span>
+          <input
+            type="text"
+            placeholder="Search by name, role or session ID..."
+            value={search}
+            onChange={handleSearchChange}
+            aria-label="Search candidates"
+            style={{
+              width: '100%', padding: '10px 34px 10px 34px',
+              borderRadius: 'var(--radius)', border: '1px solid var(--border)',
+              background: 'var(--surface2)', color: 'var(--text)',
+              fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
+              boxSizing: 'border-box', transition: 'border-color 0.2s',
+            }}
+            onFocus={e => e.target.style.borderColor = '#2563EB'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
+          {search && (
+            <button onClick={clearSearch} style={{
+              position: 'absolute', right: '10px', top: '50%',
+              transform: 'translateY(-50%)', background: 'none',
+              border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '13px',
+            }} aria-label="Clear search">✕</button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {['ALL', 'SELECTED', 'ON HOLD', 'NOT SELECTED', 'PENDING'].map(s => (
+            <button key={s} onClick={() => handleFilterChange(s)} style={{
+              padding: '6px 14px', borderRadius: '20px', fontSize: '11px',
+              fontFamily: 'var(--font-mono)', fontWeight: '600', cursor: 'pointer',
+              border: `1px solid ${filterStatus === s ? '#2563EB' : 'var(--border)'}`,
+              background: filterStatus === s ? '#2563EB20' : 'var(--surface2)',
+              color: filterStatus === s ? '#60A5FA' : 'var(--text-dim)',
+              transition: 'all 0.15s',
+            }}>
+>>>>>>> dd4a1be (Updated project)
               {s} <span style={{ opacity: 0.6 }}>({statusCounts[s] || 0})</span>
             </button>
           ))}
@@ -225,8 +421,29 @@ setApiRemarks(prev => ({
             return (
               <div key={session.id} style={{ border: `1px solid ${isOpen ? '#2563EB60' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', background: isOpen ? '#2563EB08' : 'var(--surface)', overflow: 'hidden', transition: 'border-color 0.15s, background 0.15s' }}>
 
+<<<<<<< HEAD
                 <div onClick={() => setOpenId(isOpen ? null : session.id)}
                   style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 200px 130px 60px', gap: '12px', padding: '16px 20px', alignItems: 'center', cursor: 'pointer' }}
+=======
+                {/* Collapsed row */}
+                <div
+                  onClick={() => toggleExpand(session.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleExpand(session.id)
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 1.2fr 200px 130px 60px',
+                    gap: '12px', padding: '16px 20px',
+                    alignItems: 'center', cursor: 'pointer',
+                  }}
+>>>>>>> dd4a1be (Updated project)
                   onMouseEnter={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'var(--surface2)' }}
                   onMouseLeave={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'var(--surface)' }}
                 >
@@ -267,15 +484,33 @@ setApiRemarks(prev => ({
                     <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', fontFamily: 'var(--font-mono)', background: status.bg, color: status.color, border: `1px solid ${status.border}`, letterSpacing: '0.05em' }}>{status.label}</span>
                   </div>
 
+<<<<<<< HEAD
                   <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</div>
+=======
+                  {/* Chevron */}
+                  <div style={{
+                    textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px',
+                    transition: 'transform 0.2s ease',
+                    transform: isOpen ? 'rotate(180deg)' : 'none',
+                  }} aria-hidden="true">▾</div>
+>>>>>>> dd4a1be (Updated project)
                 </div>
 
                 {isOpen && (
                   <div style={{ borderTop: '1px solid var(--border)', padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', animation: 'fadeIn 0.15s ease' }}>
                     <div style={{ padding: '16px', borderRadius: 'var(--radius)', background: '#1e293b', border: '1px solid #334155', borderLeft: '3px solid #8B5CF6' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+<<<<<<< HEAD
                         <span style={{ fontSize: '15px' }}>🤖</span>
                         <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#A78BFA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>AI Remark</span>
+=======
+                        <span style={{ fontSize: '15px' }} aria-hidden="true">🤖</span>
+                        <span style={{
+                          fontSize: '10px', fontFamily: 'var(--font-mono)',
+                          color: '#A78BFA', letterSpacing: '0.08em',
+                          textTransform: 'uppercase', fontWeight: '600',
+                        }}>AI Remark</span>
+>>>>>>> dd4a1be (Updated project)
                       </div>
 <p style={{ fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7', fontStyle: aiRemark ? 'normal' : 'italic', whiteSpace: 'pre-line' }}>
   {aiRemark || 'No AI analysis available for this session.'}
@@ -285,6 +520,7 @@ setApiRemarks(prev => ({
                     <div style={{ padding: '16px', borderRadius: 'var(--radius)', background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: '3px solid #2563EB' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+<<<<<<< HEAD
                           <span style={{ fontSize: '15px' }}>✍️</span>
                           <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#60A5FA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>Your Remark</span>
                         </div>
@@ -293,16 +529,55 @@ setApiRemarks(prev => ({
                             style={{ padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontFamily: 'var(--font-mono)', cursor: 'pointer', background: '#2563EB20', border: '1px solid #2563EB60', color: '#60A5FA', fontWeight: '600' }}>
                             {recruiterRemark || recruiterScore != null ? 'Edit' : '+ Add'}
                           </button>
+=======
+                          <span style={{ fontSize: '15px' }} aria-hidden="true">✍️</span>
+                          <span style={{
+                            fontSize: '10px', fontFamily: 'var(--font-mono)',
+                            color: '#60A5FA', letterSpacing: '0.08em',
+                            textTransform: 'uppercase', fontWeight: '600',
+                          }}>Your Remark</span>
+                        </div>
+                        {editingRemark !== session.id && (
+                          <button
+                            onClick={() => startEditing(session.id, recruiterRemark, recruiterScore)}
+                            style={{
+                              padding: '3px 10px', borderRadius: '6px', fontSize: '11px',
+                              fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                              background: '#2563EB20', border: '1px solid #2563EB60',
+                              color: '#60A5FA', fontWeight: '600',
+                            }}
+                          >{recruiterRemark || recruiterScore != null ? 'Edit' : '+ Add'}</button>
+>>>>>>> dd4a1be (Updated project)
                         )}
                       </div>
 
                       {editingRemark === session.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+<<<<<<< HEAD
                           <textarea autoFocus value={remarkDraft} onChange={e => setRemarkDraft(e.target.value)} placeholder="Write your remark about this candidate..." rows={3}
                             style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #2563EB60', background: 'var(--surface)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6' }} />
+=======
+                          <textarea
+                            autoFocus
+                            value={remarkDraft}
+                            onChange={e => setRemarkDraft(e.target.value)}
+                            placeholder="Write your remark about this candidate..."
+                            rows={3}
+                            aria-label="Recruiter remark"
+                            style={{
+                              width: '100%', padding: '10px', borderRadius: '8px',
+                              border: '1px solid #2563EB60', background: 'var(--surface)',
+                              color: 'var(--text)', fontSize: '13px',
+                              fontFamily: 'var(--font-body)', outline: 'none',
+                              resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6',
+                            }}
+                          />
+                          {/* Score input */}
+>>>>>>> dd4a1be (Updated project)
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <label style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>Your Score</label>
                             <div style={{ position: 'relative', flex: 1 }}>
+<<<<<<< HEAD
                               <input type="number" min="0" max="100" value={scoreDraft} onChange={e => { const v = e.target.value; if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setScoreDraft(v) }} placeholder="0–100"
                                 style={{ width: '100%', padding: '7px 30px 7px 10px', borderRadius: '8px', border: '1px solid #2563EB60', background: 'var(--surface)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none', boxSizing: 'border-box' }}
                                 onClick={e => e.stopPropagation()} />
@@ -313,6 +588,54 @@ setApiRemarks(prev => ({
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             <button onClick={e => { e.stopPropagation(); setEditingRemark(null); setScoreDraft('') }} style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>Cancel</button>
                             <button disabled={isSaving} onClick={e => { e.stopPropagation(); saveRemark(session.id, remarkDraft, scoreDraft) }} style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'var(--surface3)' : '#2563EB', border: 'none', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}>{isSaving ? 'Saving…' : 'Save'}</button>
+=======
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={scoreDraft}
+                                onChange={e => {
+                                  const v = e.target.value
+                                  if (v === '' || (Number(v) >= 0 && Number(v) <= 100))
+                                    setScoreDraft(v)
+                                }}
+                                placeholder="0–100"
+                                aria-label="Recruiter score (0-100)"
+                                style={{
+                                  width: '100%', padding: '7px 30px 7px 10px',
+                                  borderRadius: '8px', border: '1px solid #2563EB60',
+                                  background: 'var(--surface)', color: 'var(--text)',
+                                  fontSize: '13px', fontFamily: 'var(--font-mono)',
+                                  outline: 'none', boxSizing: 'border-box',
+                                }}
+                              />
+                              <span style={{
+                                position: 'absolute', right: '8px', top: '50%',
+                                transform: 'translateY(-50%)',
+                                fontSize: '11px', color: 'var(--text-dim)',
+                                fontFamily: 'var(--font-mono)', pointerEvents: 'none',
+                              }} aria-hidden="true">%</span>
+                            </div>
+                            {scoreDraft !== '' && (
+                              <span style={{
+                                fontSize: '16px', fontWeight: '800',
+                                fontFamily: 'var(--font-display)',
+                                color: pctColor(Number(scoreDraft)),
+                                minWidth: '44px', textAlign: 'center', flexShrink: 0,
+                              }} aria-hidden="true">{scoreDraft}%</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={cancelEditing}
+                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
+                            >Cancel</button>
+                            <button
+                              disabled={isSaving}
+                              onClick={() => saveRemark(session.id, remarkDraft, scoreDraft)}
+                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'var(--surface3)' : '#2563EB', border: 'none', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}
+                            >{isSaving ? 'Saving…' : 'Save'}</button>
+>>>>>>> dd4a1be (Updated project)
                           </div>
                         </div>
                       ) : (
@@ -336,6 +659,16 @@ setApiRemarks(prev => ({
           })}
         </div>
       )}
+      
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }

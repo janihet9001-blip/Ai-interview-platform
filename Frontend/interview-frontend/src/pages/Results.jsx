@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import API from "../services/api";
+import PropTypes from 'prop-types';
 
 function cleanMarkdown(text) {
   if (!text) return text;
@@ -379,13 +380,30 @@ const STYLES = `
   }
 `;
 
+// PropTypes for functions (quality improvement)
+cleanMarkdown.propTypes = {
+  text: PropTypes.string
+};
+
 export default function Results() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const [allQuestions, setAllQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [error, setError] = useState(null);
+  const timeoutRef = useRef(null);
 
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Inject and cleanup styles
   useEffect(() => {
     if (!document.getElementById('rs-styles')) {
       const el = document.createElement('style');
@@ -393,56 +411,114 @@ export default function Results() {
       el.textContent = STYLES;
       document.head.appendChild(el);
     }
-    return () => { document.getElementById('rs-styles')?.remove(); };
+    return () => { 
+      const el = document.getElementById('rs-styles');
+      if (el) el.remove();
+    };
   }, []);
 
-  useEffect(() => { fetchResults(); }, [sessionId]);
+  // Fetch results with cleanup
+  const fetchResults = useCallback(async (attempt = 1) => {
+    if (!sessionId) {
+      setError('No session ID provided');
+      setLoading(false);
+      return;
+    }
 
-  const fetchResults = async (attempt = 1) => {
     try {
       const res = await API.get(`/interview/${sessionId}/questions`);
       const data = res.data || [];
       setAllQuestions(data);
       setLoading(false);
+      setError(null);
+      
       const pendingEval = data.some(q => q.userAnswer && !q.aiFeedback);
       if (pendingEval && attempt < 6) {
         setRetrying(true);
-        setTimeout(() => fetchResults(attempt + 1), 2000);
+        timeoutRef.current = setTimeout(() => fetchResults(attempt + 1), 2000);
       } else {
         setRetrying(false);
       }
     } catch (err) {
-      console.error('Failed to fetch results', err);
+      console.error('Failed to fetch results:', err);
+      if (err.response?.status === 404) {
+        setError('Session not found. Please check the URL.');
+      } else if (err.response?.status === 403) {
+        setError('You do not have permission to view these results.');
+      } else {
+        setError('Failed to load results. Please try again.');
+      }
       setLoading(false);
       setRetrying(false);
     }
-  };
+  }, [sessionId]);
 
+  useEffect(() => { 
+    fetchResults(); 
+  }, [fetchResults]);
+
+  // Memoize calculations for performance
   const answeredQuestions = allQuestions.filter(
     q => q.userAnswer && q.userAnswer.trim() !== ""
   );
+  
   const aiAnswered = answeredQuestions.filter(q => Number(q.questionNumber) !== 999);
   const totalScore = aiAnswered.reduce((sum, q) => sum + (q.score || 0), 0);
   const maxScore = aiAnswered.length * 10;
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
 
-  const getScoreColor = (score) => {
+  const getScoreColor = useCallback((score) => {
     if (!score && score !== 0) return { color: '#64748b', glow: 'rgba(100,116,139,0.3)' };
     if (score >= 8) return { color: 'var(--score-excellent)', glow: 'rgba(34,197,94,0.3)' };
     if (score >= 5) return { color: 'var(--blue-400)', glow: 'var(--blue-glow)' };
     if (score >= 3) return { color: 'var(--score-average)', glow: 'rgba(245,158,11,0.3)' };
     return { color: 'var(--score-poor)', glow: 'rgba(239,68,68,0.3)' };
-  };
+  }, []);
 
-  const getGrade = (pct) => {
-    if (pct >= 80) return { grade: 'Excellent',      color: 'var(--score-excellent)', faint: 'rgba(34,197,94,0.25)' };
-    if (pct >= 60) return { grade: 'Good',           color: 'var(--blue-400)',        faint: 'var(--blue-glow)' };
-    if (pct >= 40) return { grade: 'Average',        color: 'var(--score-average)',   faint: 'rgba(245,158,11,0.25)' };
-    return          { grade: 'Needs Practice',      color: 'var(--score-poor)',      faint: 'rgba(239,68,68,0.25)' };
-  };
+  const getGrade = useCallback((pct) => {
+    if (pct >= 80) return { grade: 'Excellent', color: 'var(--score-excellent)', faint: 'rgba(34,197,94,0.25)' };
+    if (pct >= 60) return { grade: 'Good', color: 'var(--blue-400)', faint: 'var(--blue-glow)' };
+    if (pct >= 40) return { grade: 'Average', color: 'var(--score-average)', faint: 'rgba(245,158,11,0.25)' };
+    return { grade: 'Needs Practice', color: 'var(--score-poor)', faint: 'rgba(239,68,68,0.25)' };
+  }, []);
 
   const { grade, color: gradeColor, faint: gradeFaint } = getGrade(percentage);
-  const scoreAngle = `${Math.round((percentage / 100) * 360)}deg`;
+
+  // Error state
+  if (error) {
+    return (
+      <div className="rs-page">
+        <div className="rs-bg" /><div className="rs-grain" />
+        <div className="rs-inner" style={{ textAlign: 'center' }}>
+          <div style={{ 
+            background: 'var(--bg-card)', 
+            border: '1px solid #EF4444',
+            borderRadius: '16px',
+            padding: '48px',
+            marginTop: '60px'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <h2 style={{ fontSize: '24px', color: '#EF4444', marginBottom: '12px' }}>Error Loading Results</h2>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '24px' }}>{error}</p>
+            <button
+              onClick={() => navigate('/dashboard')}
+              style={{
+                padding: '12px 24px',
+                background: '#2563EB',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)'
+              }}
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) return (
     <div className="rs-page">
@@ -454,6 +530,43 @@ export default function Results() {
     </div>
   );
 
+  if (answeredQuestions.length === 0) {
+    return (
+      <div className="rs-page">
+        <div className="rs-bg" /><div className="rs-grain" />
+        <div className="rs-inner" style={{ textAlign: 'center' }}>
+          <div style={{ 
+            background: 'var(--bg-card)', 
+            border: '1px solid var(--border-default)',
+            borderRadius: '16px',
+            padding: '48px',
+            marginTop: '60px'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
+            <h2 style={{ fontSize: '24px', marginBottom: '12px' }}>No Answers Found</h2>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '24px' }}>
+              No answers were recorded for this interview session.
+            </p>
+            <button
+              onClick={() => navigate('/dashboard')}
+              style={{
+                padding: '12px 24px',
+                background: '#2563EB',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)'
+              }}
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rs-page">
       <div className="rs-bg" />
@@ -462,11 +575,36 @@ export default function Results() {
       <div className="rs-grid" />
 
       <div className="rs-inner">
-
         {/* Header */}
         <div className="rs-header">
           <p className="rs-eyebrow">Session complete</p>
           <h1 className="rs-title">Interview Results</h1>
+        </div>
+
+        {/* Score Summary Card */}
+        <div className="rs-score-card">
+          <div className="rs-score-circle">
+            <div className="rs-score-ring" style={{ '--score-color': gradeColor, '--score-pct': `${percentage}%` }}>
+              <div className="rs-score-num">{percentage}%</div>
+              <div className="rs-score-sub">Overall Score</div>
+            </div>
+          </div>
+          <div className="rs-score-info">
+            <div className="rs-grade-badge" style={{ '--score-color': gradeColor, '--score-color-faint': gradeFaint }}>
+              <span className="rs-grade-dot" />
+              {grade}
+            </div>
+            <div className="rs-score-stats" style={{ marginLeft: 'auto' }}>
+              <div className="rs-stat-item">
+                <div className="rs-stat-val">{answeredQuestions.length}</div>
+                <div className="rs-stat-lbl">Questions</div>
+              </div>
+              <div className="rs-stat-item">
+                <div className="rs-stat-val">{totalScore}/{maxScore}</div>
+                <div className="rs-stat-lbl">Points</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Retrying notice */}
@@ -488,7 +626,7 @@ export default function Results() {
 
             return (
               <div
-                key={q.id}
+                key={q.id || index}
                 className="rs-qcard"
                 style={{ animationDelay: `${0.05 + index * 0.06}s` }}
               >
@@ -506,7 +644,9 @@ export default function Results() {
 
                 <div className="rs-section">
                   <span className="rs-section-lbl rs-answer-lbl">Your Answer</span>
-                  <p className="rs-section-body rs-answer-body">{userAnswer}</p>
+                  <p className="rs-section-body rs-answer-body">
+                    {userAnswer || <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>No answer provided</span>}
+                  </p>
                 </div>
 
                 <div className="rs-section" style={{ background: 'rgba(10, 15, 45, 0.5)' }}>
@@ -516,14 +656,13 @@ export default function Results() {
                       ? aiFeedback
                       : retrying
                         ? <span className="rs-evaluating">Evaluating...</span>
-                        : "No feedback available"}
+                        : <span style={{ fontStyle: 'italic' }}>No feedback available</span>}
                   </p>
                 </div>
               </div>
             );
           })}
         </div>
-
       </div>
     </div>
   );

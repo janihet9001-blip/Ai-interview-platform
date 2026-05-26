@@ -11,13 +11,30 @@ import Profile from './pages/Profile'
 import RecruiterDashboard from './pages/RecruiterDashboard'
 import WaitingRoom from './pages/WaitingRoom'
 
+// ✅ Create a simple spinner component or import from LoadingStates
+const FullPageSpinner = () => (
+  <div className="fixed inset-0 flex items-center justify-center bg-bg z-50">
+    <div className="w-12 h-12 border-4 border-accent/20 rounded-full animate-spin border-t-accent" />
+  </div>
+)
+
 function PrivateRoute({ children }) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+  
+  if (loading) {
+    return <FullPageSpinner />
+  }
+  
   return user ? children : <Navigate to="/login" replace />
 }
 
 function AdminRoute({ children }) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+  
+  if (loading) {
+    return <FullPageSpinner />
+  }
+  
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== 'ADMIN') return <Navigate to="/dashboard" replace />
   return children

@@ -6,6 +6,7 @@ import SockJS from 'sockjs-client'
 import { Client } from '@stomp/stompjs'
 import ResumeScreeningTab from './ResumeScreeningTab'
 import CandidatesTab from './CandidatesTab'
+import PropTypes from 'prop-types'
 
 const JOB_ROLES = [
   'JAVA_DEVELOPER',
@@ -15,6 +16,11 @@ const JOB_ROLES = [
 
 const pctColor = (pct) =>
   pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
+
+// PropTypes for helper functions (optional but good for quality)
+pctColor.propTypes = {
+  pct: PropTypes.number,
+}
 
 export default function RecruiterDashboard() {
   const [violationCount, setViolationCount] = useState(0)
@@ -53,6 +59,7 @@ export default function RecruiterDashboard() {
   const stompClient = useRef(null)
   const pollingStoppedRef = useRef(false)
   const mountedTabs = useRef(new Set(['live']))
+  const intervalRef = useRef(null)
 
   const parseSession = (s) => ({
     id: s.id, jobRole: s.jobRole, totalScore: s.totalScore,
@@ -60,6 +67,23 @@ export default function RecruiterDashboard() {
     startedAt: s.startedAt, completedAt: s.completedAt,
     userName: s.userName, userId: s.userId, actualQuestions: s.actualQuestions,
   })
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+      if (stompClient.current) {
+        try {
+          stompClient.current.deactivate()
+        } catch (e) {
+          // Ignore
+        }
+        stompClient.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -88,6 +112,7 @@ export default function RecruiterDashboard() {
         setCompletedSessions(completed.slice(0, 10))
       } catch (err) {
         if (err?.response?.status === 403) pollingStoppedRef.current = true
+        console.error('Failed to load data:', err)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -107,7 +132,10 @@ export default function RecruiterDashboard() {
         setAllCompletedSessions(completed)
         setCompletedSessions(completed.slice(0, 10))
       })
-      .catch(err => { if (err?.response?.status === 403) pollingStoppedRef.current = true })
+      .catch(err => { 
+        if (err?.response?.status === 403) pollingStoppedRef.current = true
+        console.error('Failed to fetch sessions:', err)
+      })
   }, [])
 
   const loadAnalysisForSession = useCallback(async (sessionId) => {
@@ -116,20 +144,14 @@ export default function RecruiterDashboard() {
     setAnalysisLoading(true)
     setReportSessionId(sessionId)
 
-    // FIX 2: Skip stale localStorage — always fetch fresh from API
-    // Removed localStorage cache read to prevent stale/missing question data
-
     try {
       const res = await api.get(`/interview/${sessionId}/questions`)
-      // FIX 1: Show ALL questions — do NOT filter out empty/blank answers
-      // Previously: .filter(q => Number(q.questionNumber) === 999 || (q.userAnswer && q.userAnswer.trim() !== ''))
-      // Now: keep every question including unanswered/suspicious ones
-const allParsed = (res.data || [])
-  .filter(q =>
-    Number(q.questionNumber) === 999 ||
-    (q.userAnswer && q.userAnswer.trim() !== '')
-  )
-  .map(q => ({
+      const allParsed = (res.data || [])
+        .filter(q =>
+          Number(q.questionNumber) === 999 ||
+          (q.userAnswer && q.userAnswer.trim() !== '')
+        )
+        .map(q => ({
           questionNumber: q.questionNumber,
           questionText: q.questiontext || q.questionText || 'Question unavailable',
           userAnswer: q.userAnswer,
@@ -143,6 +165,7 @@ const allParsed = (res.data || [])
       setAnalysisQuestions(prev => ({ ...prev, [sessionId]: allParsed }))
     } catch (err) {
       if (err?.response?.status === 403) pollingStoppedRef.current = true
+      console.error('Failed to load analysis:', err)
       setAnalysisQuestions(prev => ({ ...prev, [sessionId]: [] }))
     } finally {
       setAnalysisLoading(false)
@@ -159,75 +182,166 @@ const allParsed = (res.data || [])
 
   useEffect(() => { reportAutoLoadedRef.current = false }, [completedSessions])
 
+  // WebSocket connection with cleanup
   useEffect(() => {
     if (!activeSessionId) return
+    
     setWsConnected(false)
+    let isSubscribed = true
+    
     const client = new Client({
-webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
+      webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
       reconnectDelay: 2000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
       onConnect: () => {
+        if (!isSubscribed) return
         setWsConnected(true)
+        
         client.subscribe(`/topic/typing/${activeSessionId}`, (msg) => {
-          const data = JSON.parse(msg.body)
-          const key = data.questionNumber === 'R' ? 'R' : data.questionNumber
-          setLiveFeed(prev => ({ ...prev, [key]: { ...(prev[key] || {}), questionText: data.questionText, currentAnswer: data.currentAnswer, status: data.status } }))
+          try {
+            const data = JSON.parse(msg.body)
+            const key = data.questionNumber === 'R' ? 'R' : data.questionNumber
+            setLiveFeed(prev => ({ ...prev, [key]: { ...(prev[key] || {}), questionText: data.questionText, currentAnswer: data.currentAnswer, status: data.status } }))
+          } catch (err) {
+            console.error('Failed to parse typing message:', err)
+          }
         })
+        
         client.subscribe(`/topic/feedback/${activeSessionId}`, (msg) => {
-          const feedback = JSON.parse(msg.body)
-          if (feedback.questionId == null) return
-          setLiveFeed(prev => {
-            const updated = { ...prev }
-            Object.keys(updated).forEach(key => {
-              if (updated[key].status === 'SUBMITTED' && updated[key].score == null && key !== 'R' && String(key) === String(feedback.questionsAnswered)) {
-                updated[key] = { ...updated[key], score: feedback.score }
-              }
+          try {
+            const feedback = JSON.parse(msg.body)
+            if (feedback.questionId == null) return
+            setLiveFeed(prev => {
+              const updated = { ...prev }
+              Object.keys(updated).forEach(key => {
+                if (updated[key].status === 'SUBMITTED' && updated[key].score == null && key !== 'R' && String(key) === String(feedback.questionsAnswered)) {
+                  updated[key] = { ...updated[key], score: feedback.score }
+                }
+              })
+              return updated
             })
-            return updated
-          })
+          } catch (err) {
+            console.error('Failed to parse feedback message:', err)
+          }
         })
+        
         client.subscribe(`/topic/proctoring`, (msg) => {
-          const event = JSON.parse(msg.body)
-          if (String(event.sessionId) === String(activeSessionId)) {
-            setProctoringAlerts(prev => [event, ...prev].slice(0, 50))
-            setViolationCount(prev => {
-              const newCount = prev + 1
-              if (newCount === 1) stompClient.current?.publish({ destination: '/app/warning', body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }) })
-              if (newCount >= 2) { setLatestViolation(event); setShowEndPopup(true) }
-              return newCount
-            })
+          try {
+            const event = JSON.parse(msg.body)
+            if (String(event.sessionId) === String(activeSessionId)) {
+              setProctoringAlerts(prev => [event, ...prev].slice(0, 50))
+              setViolationCount(prev => {
+                const newCount = prev + 1
+                if (newCount === 1) {
+                  stompClient.current?.publish({ 
+                    destination: '/app/warning', 
+                    body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }) 
+                  })
+                }
+                if (newCount >= 2) { 
+                  setLatestViolation(event)
+                  setShowEndPopup(true)
+                }
+                return newCount
+              })
+            }
+          } catch (err) {
+            console.error('Failed to parse proctoring message:', err)
           }
         })
       },
-      onDisconnect: () => setWsConnected(false),
-      onStompError: () => setWsConnected(false),
+      onDisconnect: () => {
+        if (isSubscribed) setWsConnected(false)
+      },
+      onStompError: (frame) => {
+        console.error('STOMP error:', frame)
+        setWsConnected(false)
+      },
+      onWebSocketError: (event) => {
+        console.error('WebSocket error:', event)
+        setWsConnected(false)
+      }
     })
+    
     client.activate()
     stompClient.current = client
-    return () => { client.deactivate(); setWsConnected(false) }
+    
+    return () => {
+      isSubscribed = false
+      if (stompClient.current) {
+        try {
+          stompClient.current.deactivate()
+        } catch (e) {
+          // Ignore
+        }
+        stompClient.current = null
+      }
+      setWsConnected(false)
+    }
   }, [activeSessionId])
 
   const handleStart = () => {
-    if (!selectedCandidate) { setMessage('Select a candidate first'); setMessageType('error'); return }
-    setStarting(true); setMessage(''); setLiveFeed({}); setProctoringAlerts([])
-    setIsPaused(false); setIsStopped(false); setWsConnected(false)
+    if (!selectedCandidate) { 
+      setMessage('Select a candidate first')
+      setMessageType('error')
+      return 
+    }
+    setStarting(true)
+    setMessage('')
+    setLiveFeed({})
+    setProctoringAlerts([])
+    setIsPaused(false)
+    setIsStopped(false)
+    setWsConnected(false)
+    
     api.post('/interview/start', { candidateId: selectedCandidate.id, jobRole: selectedRole })
       .then(res => {
         setMessage(`Interview started for ${selectedCandidate.fullName} — Session #${res.data.id}`)
-        setMessageType('success'); setActiveSessionId(res.data.id); setStarting(false)
+        setMessageType('success')
+        setActiveSessionId(res.data.id)
+        setStarting(false)
       })
-      .catch(() => { setMessage('Failed to start interview.'); setMessageType('error'); setStarting(false) })
+      .catch((err) => {
+        console.error('Failed to start interview:', err)
+        setMessage('Failed to start interview.')
+        setMessageType('error')
+        setStarting(false)
+      })
   }
 
   const handleEndForCheating = () => {
     if (!stompClient.current?.connected || !activeSessionId) return
-    stompClient.current.publish({ destination: '/app/warning', body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }) })
-    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) })
-    api.post(`/interview/${activeSessionId}/complete`).catch(() => {})
-    setShowEndPopup(false); setViolationCount(0); setIsStopped(true); setIsPaused(true)
-    setMessage('Interview terminated due to repeated violations.'); setMessageType('error')
+    
+    try {
+      stompClient.current.publish({ 
+        destination: '/app/warning', 
+        body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }) 
+      })
+      stompClient.current.publish({ 
+        destination: '/app/pause', 
+        body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) 
+      })
+      api.post(`/interview/${activeSessionId}/complete`).catch(() => {})
+    } catch (err) {
+      console.error('Failed to end interview:', err)
+    }
+    
+    setShowEndPopup(false)
+    setViolationCount(0)
+    setIsStopped(true)
+    setIsPaused(true)
+    setMessage('Interview terminated due to repeated violations.')
+    setMessageType('error')
+    
     setTimeout(() => {
-      setActiveSessionId(null); setLiveFeed({}); setProctoringAlerts([])
-      setIsPaused(false); setIsStopped(false); setWsConnected(false); setViolationCount(0)
+      setActiveSessionId(null)
+      setLiveFeed({})
+      setProctoringAlerts([])
+      setIsPaused(false)
+      setIsStopped(false)
+      setWsConnected(false)
+      setViolationCount(0)
       fetchCompletedSessions()
     }, 2000)
   }
@@ -235,24 +349,42 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
   const handlePauseResume = () => {
     if (!stompClient.current?.connected || !activeSessionId || isStopped) return
     const action = isPaused ? 'RESUME' : 'PAUSE'
-    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action }) })
+    stompClient.current.publish({ 
+      destination: '/app/pause', 
+      body: JSON.stringify({ sessionId: activeSessionId, action }) 
+    })
     setIsPaused(!isPaused)
   }
 
   const handleStop = () => {
     if (!stompClient.current?.connected || !activeSessionId) return
     if (!window.confirm('Are you sure you want to end this interview?')) return
-    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) })
-    api.post(`/interview/${activeSessionId}/complete`).catch(() => {})
-    setIsStopped(true); setIsPaused(true)
+    
+    try {
+      stompClient.current.publish({ 
+        destination: '/app/pause', 
+        body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) 
+      })
+      api.post(`/interview/${activeSessionId}/complete`).catch(() => {})
+    } catch (err) {
+      console.error('Failed to stop interview:', err)
+    }
+    
+    setIsStopped(true)
+    setIsPaused(true)
+    
     setTimeout(() => {
       const endedSessionId = activeSessionId
-      setActiveSessionId(null); setLiveFeed({}); setProctoringAlerts([])
-      setIsPaused(false); setIsStopped(false); setWsConnected(false)
-      setMessage('Interview ended. Report available in Analysis Reports tab.'); setMessageType('success')
+      setActiveSessionId(null)
+      setLiveFeed({})
+      setProctoringAlerts([])
+      setIsPaused(false)
+      setIsStopped(false)
+      setWsConnected(false)
+      setMessage('Interview ended. Report available in Analysis Reports tab.')
+      setMessageType('success')
       pollingStoppedRef.current = false
       fetchCompletedSessions()
-      // FIX 2: Clear stale localStorage so next load fetches fresh data from API
       localStorage.removeItem(`interview_analysis_${endedSessionId}`)
       setAnalysisQuestions(prev => { const u = { ...prev }; delete u[endedSessionId]; return u })
       setReportSessionId(null)
@@ -262,16 +394,44 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
 
   const handleRecruiterQuestion = () => {
     if (!recruiterQuestion.trim() || !activeSessionId) return
-    if (!stompClient.current?.connected) { alert('WebSocket not connected yet.'); return }
-    setLiveFeed(prev => ({ ...prev, R: { questionText: recruiterQuestion, currentAnswer: '', status: 'TYPING' } }))
-    stompClient.current.publish({ destination: '/app/recruiter-question', body: JSON.stringify({ sessionId: activeSessionId, question: recruiterQuestion }) })
+    if (!stompClient.current?.connected) { 
+      alert('WebSocket not connected yet.')
+      return 
+    }
+    
+    setLiveFeed(prev => ({ 
+      ...prev, 
+      R: { questionText: recruiterQuestion, currentAnswer: '', status: 'TYPING' } 
+    }))
+    
+    stompClient.current.publish({ 
+      destination: '/app/recruiter-question', 
+      body: JSON.stringify({ sessionId: activeSessionId, question: recruiterQuestion }) 
+    })
     setRecruiterQuestion('')
   }
 
-  const handleTabClick = (tabId) => { mountedTabs.current.add(tabId); setActiveTab(tabId) }
+  const handleTabClick = (tabId) => { 
+    mountedTabs.current.add(tabId)
+    setActiveTab(tabId)
+  }
 
-  const getEventIcon = (t) => ({ PASTE_DETECTED: '📋', RIGHT_CLICK: '🖱️', KEYBOARD_SHORTCUT: '⌨️', ALT_TAB_DETECTED: '🪟', WINDOW_BLUR: '👁️' }[t] || '⚠️')
-  const formatEventType = (t) => ({ PASTE_DETECTED: 'Paste Detected!', RIGHT_CLICK: 'Right Click Attempted', KEYBOARD_SHORTCUT: 'Keyboard Shortcut Blocked', ALT_TAB_DETECTED: 'Alt+Tab Attempted', WINDOW_BLUR: 'Window Switch Detected' }[t] || t)
+  const getEventIcon = (t) => ({ 
+    PASTE_DETECTED: '📋', 
+    RIGHT_CLICK: '🖱️', 
+    KEYBOARD_SHORTCUT: '⌨️', 
+    ALT_TAB_DETECTED: '🪟', 
+    WINDOW_BLUR: '👁️' 
+  }[t] || '⚠️')
+  
+  const formatEventType = (t) => ({ 
+    PASTE_DETECTED: 'Paste Detected!', 
+    RIGHT_CLICK: 'Right Click Attempted', 
+    KEYBOARD_SHORTCUT: 'Keyboard Shortcut Blocked', 
+    ALT_TAB_DETECTED: 'Alt+Tab Attempted', 
+    WINDOW_BLUR: 'Window Switch Detected' 
+  }[t] || t)
+  
   const getAlertDescription = (e) => {
     if (e.pastedText) return `Pasted: "${e.pastedText.substring(0, 100)}${e.pastedText.length > 100 ? '...' : ''}"`
     if (e.shortcutKey) return `Shortcut: ${e.shortcutKey} - ${e.details || 'Attempted blocked action'}`
@@ -426,7 +586,6 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
                   <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #2563EB' }}>{q.questionText}</p>
                   <div style={{ background: 'var(--surface2)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
                     <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>Candidate Answer</p>
-                    {/* FIX 1: Show placeholder for empty answers instead of hiding the question */}
                     <p style={{ fontSize: '13px', color: q.userAnswer && q.userAnswer.trim() ? 'var(--text)' : 'var(--text-muted)', margin: 0, lineHeight: '1.6', whiteSpace: 'pre-wrap', fontStyle: q.userAnswer && q.userAnswer.trim() ? 'normal' : 'italic' }}>
                       {q.userAnswer && q.userAnswer.trim() ? q.userAnswer : '— No answer provided —'}
                     </p>
@@ -687,6 +846,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
 
       <style>{`
         @keyframes scanline { 0% { top: 0 } 100% { top: 100% } }
+        @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .badge-red { background: #EF444415; color: #EF4444; border: 1px solid #EF444460; border-radius: 12px; padding: 2px 8px; font-size: 10px; font-weight: 600; font-family: monospace; }
       `}</style>
     </div>

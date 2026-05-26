@@ -6,6 +6,7 @@ import API from '../services/api'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import ProctoringHandler from '../components/ProctoringHandler'
+import PropTypes from 'prop-types'
 
 const roleLabels = {
   JAVA_DEVELOPER: 'Java Developer',
@@ -140,11 +141,17 @@ function TypingBubble() {
   )
 }
 
+// PropTypes for quality
+BotBubble.propTypes = { text: PropTypes.string.isRequired }
+InterviewerBubble.propTypes = { text: PropTypes.string.isRequired }
+UserBubble.propTypes = { text: PropTypes.string.isRequired }
+
 export default function Interviews() {
   const { role } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
 
+  // Back button prevention
   useEffect(() => {
     window.history.pushState(null, '', window.location.href)
     const handlePopState = () => {
@@ -179,8 +186,6 @@ export default function Interviews() {
   const [allAnswers, setAllAnswers] = useState({})
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showWarning, setShowWarning] = useState(false)
-
-  // ── NEW: termination overlay state ──
   const [showTerminated, setShowTerminated] = useState(false)
   const [terminatedCountdown, setTerminatedCountdown] = useState(5)
 
@@ -195,8 +200,8 @@ export default function Interviews() {
   const questionsRef = useRef([])
   const currentRef = useRef(0)
   const chatEndRef = useRef(null)
-const sessionStarted = useRef(false)
-const spokenRef = useRef(new Set())
+  const sessionStarted = useRef(false)
+  const spokenRef = useRef(new Set())
   const [showCamera, setShowCamera] = useState(false)
 
   const accent = roleColors[role] || '#2563EB'
@@ -213,7 +218,34 @@ const spokenRef = useRef(new Set())
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, submitting])
 
-  // ── Countdown timer when terminated overlay is shown ──
+  // ✅ Cleanup on unmount - prevents memory leaks
+  useEffect(() => {
+    return () => {
+      // Clean up speech recognition
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          // Ignore errors if already stopped
+        }
+        recognitionRef.current = null
+      }
+      
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel()
+      
+      // Clean up WebSocket
+      if (stompClient.current) {
+        try {
+          stompClient.current.deactivate()
+        } catch (e) {
+          // Ignore
+        }
+      }
+    }
+  }, [])
+
+  // Countdown timer when terminated overlay is shown
   useEffect(() => {
     if (!showTerminated) return
     setTerminatedCountdown(5)
@@ -229,45 +261,46 @@ const spokenRef = useRef(new Set())
       })
     }, 1000)
     return () => clearInterval(interval)
-  }, [showTerminated])
+  }, [showTerminated, navigate])
 
-const botSay = (text) => {
-  if (spokenRef.current.has(text)) return
-  spokenRef.current.add(text)
-  
-  setMessages(prev => [...prev, { from: 'bot', text }])
+  const botSay = (text) => {
+    if (spokenRef.current.has(text)) return
+    spokenRef.current.add(text)
+    
+    setMessages(prev => [...prev, { from: 'bot', text }])
 
-  const speakWhenReady = () => {
-    if (window.speechSynthesis.speaking) {
-      setTimeout(speakWhenReady, 100)
-      return
+    const speakWhenReady = () => {
+      if (window.speechSynthesis.speaking) {
+        setTimeout(speakWhenReady, 100)
+        return
+      }
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 0.95
+      utterance.pitch = 1
+      utterance.volume = 1
+      window.speechSynthesis.speak(utterance)
     }
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.95
-    utterance.pitch = 1
-    utterance.volume = 1
-    window.speechSynthesis.speak(utterance)
+    speakWhenReady()
   }
-  speakWhenReady()
-}
 
-const interviewerSay = (text) => {
-  setMessages(prev => [...prev, { from: 'interviewer', text }])
-  
-  const speakWhenReady = () => {
-    if (window.speechSynthesis.speaking) {
-      setTimeout(speakWhenReady, 100)
-      return
+  const interviewerSay = (text) => {
+    setMessages(prev => [...prev, { from: 'interviewer', text }])
+    
+    const speakWhenReady = () => {
+      if (window.speechSynthesis.speaking) {
+        setTimeout(speakWhenReady, 100)
+        return
+      }
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 0.95
+      utterance.pitch = 1
+      utterance.volume = 1
+      window.speechSynthesis.speak(utterance)
     }
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.95
-    utterance.pitch = 1
-    utterance.volume = 1
-    window.speechSynthesis.speak(utterance)
+    
+    speakWhenReady()
   }
-  
-  speakWhenReady()
-}
+
   const userSay = (text) => {
     setMessages(prev => [...prev, { from: 'user', text }])
   }
@@ -381,13 +414,31 @@ Respond ONLY with a raw JSON object:
     return () => clearInterval(t)
   }, [])
 
+  // START SESSION WITH COMPLETED CHECK - FIXES INTERVIEW RESTART BUG
   useEffect(() => {
     const startSession = async () => {
       if (sessionStarted.current) return
-        sessionStarted.current = true  
+      sessionStarted.current = true  
+      
       try {
         const urlParams = new URLSearchParams(window.location.search)
         const sessionId = urlParams.get('sessionId')
+        
+        // Check if session already exists and is COMPLETED
+        if (sessionId) {
+          try {
+            const sessionCheck = await API.get(`/interview/${sessionId}/status`)
+            if (sessionCheck.data.status === 'COMPLETED' || sessionCheck.data.status === 'ABANDONED') {
+              // Session already completed - redirect to results without starting
+              setLoading(false)
+              navigate(`/results/${sessionId}`, { replace: true })
+              return
+            }
+          } catch (checkErr) {
+            console.error('Session status check failed:', checkErr)
+          }
+        }
+        
         let sessionData
 
         if (sessionId) {
@@ -412,18 +463,20 @@ Respond ONLY with a raw JSON object:
         }
 
         const welcomeMsg = `${getGreeting()} — welcome to your ${label} interview. I'll be asking you a series of technical questions. Please answer them clearly and in your own words.`
-const warningMsg = `⚠️ Important: Please close all other tabs and applications before we begin. Do not use AI tools, search engines, or any external help during this interview. All activity is being monitored and any violation will be reported to the recruiter immediately.`
+        const warningMsg = `⚠️ Important: Please close all other tabs and applications before we begin. Do not use AI tools, search engines, or any external help during this interview. All activity is being monitored and any violation will be reported to the recruiter immediately.`
 
-setTimeout(() => botSay(welcomeMsg), 300)
-setTimeout(() => botSay(warningMsg), 2000)
-setTimeout(() => setShowCamera(true), 3500)
-setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 6000)
-setTimeout(() => setProctoringEnabled(true), 6000)
+        setTimeout(() => botSay(welcomeMsg), 300)
+        setTimeout(() => botSay(warningMsg), 2000)
+        setTimeout(() => setShowCamera(true), 3500)
+        setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 6000)
+        setTimeout(() => setProctoringEnabled(true), 6000)
 
         const client = new Client({
-webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
+          webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
+          reconnectDelay: 5000,
+          heartbeatIncoming: 4000,
+          heartbeatOutgoing: 4000,
           onConnect: () => {
-
             client.subscribe(`/topic/feedback/${sessionData.id}`, (message) => {
               const feedback = JSON.parse(message.body)
               if (stoppedRef.current || ignoreFeedbackRef.current) { setSubmitting(false); return }
@@ -525,19 +578,20 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
                 window.speechSynthesis.cancel()
                 setTimeout(() => setShowWarning(false), 10000)
               }
-              // ── CHANGED: show termination overlay instead of plain botSay ──
               if (data.action === 'END_FOR_CHEATING') {
                 setShowWarning(false)
                 setStopped(true)
                 stoppedRef.current = true
                 ignoreFeedbackRef.current = true
                 window.speechSynthesis.cancel()
-                setShowTerminated(true) // triggers overlay + countdown
+                setShowTerminated(true)
               }
             })
-
           },
           onStompError: () => { setError('Connection failed.'); setSubmitting(false) },
+          onDisconnect: () => {
+            console.log('Disconnected from WebSocket')
+          }
         })
         client.activate()
         stompClient.current = client
@@ -671,8 +725,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-body)' }}>
-
-      {/* ── TERMINATION OVERLAY (END_FOR_CHEATING) ── */}
+      {/* TERMINATION OVERLAY */}
       {showTerminated && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -695,13 +748,10 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
             position: 'relative',
             overflow: 'hidden',
           }}>
-            {/* Top gradient bar */}
             <div style={{
               position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
               background: 'linear-gradient(90deg, #EF4444, #F97316, #EF4444)',
             }} />
-
-            {/* Icon */}
             <div style={{
               width: '72px', height: '72px', borderRadius: '50%',
               background: '#EF444418',
@@ -712,8 +762,6 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
             }}>
               🚫
             </div>
-
-            {/* Title */}
             <h2 style={{
               fontFamily: 'var(--font-display)',
               fontSize: '24px', fontWeight: '800',
@@ -722,8 +770,6 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
             }}>
               Interview Terminated
             </h2>
-
-            {/* One-liner message */}
             <p style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '13px',
@@ -737,8 +783,6 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
             }}>
               Your interview has been ended due to a violation issue.
             </p>
-
-            {/* Detail */}
             <p style={{
               fontSize: '14px', color: '#94A3B8',
               lineHeight: '1.8', margin: '0 0 28px',
@@ -746,8 +790,6 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
             }}>
               Multiple suspicious activities were detected and reported during your session. The recruiter has terminated this interview.
             </p>
-
-            {/* Countdown */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               gap: '10px',
@@ -777,7 +819,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
         </div>
       )}
 
-      {/* ── Warning overlay (first violation) ── */}
+      {/* WARNING OVERLAY */}
       {showWarning && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -833,7 +875,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-dim)', padding: '4px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px' }}>{fmt(seconds)}</span>
-{showCamera && <CameraStream sessionId={session?.id} userId={user?.id} />}
+          {showCamera && <CameraStream sessionId={session?.id} userId={user?.id} />}
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>Q {current + 1}</span>
           <button
             onClick={handleFinish}
@@ -847,15 +889,15 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
         </div>
       </nav>
 
-<div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '780px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-  {messages.map((msg, i) => {
-    if (msg.from === 'bot') return <BotBubble key={i} text={msg.text} />
-    if (msg.from === 'interviewer') return <InterviewerBubble key={i} text={msg.text} />
-    return <UserBubble key={i} text={msg.text} />
-  })}
-  {submitting && <TypingBubble />}
-  <div ref={chatEndRef} />
-</div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '780px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+        {messages.map((msg, i) => {
+          if (msg.from === 'bot') return <BotBubble key={i} text={msg.text} />
+          if (msg.from === 'interviewer') return <InterviewerBubble key={i} text={msg.text} />
+          return <UserBubble key={i} text={msg.text} />
+        })}
+        {submitting && <TypingBubble />}
+        <div ref={chatEndRef} />
+      </div>
 
       <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)', padding: '20px 24px', flexShrink: 0 }}>
         <div style={{ maxWidth: '780px', margin: '0 auto' }}>
@@ -896,11 +938,17 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
         </div>
       </div>
 
-<ProctoringHandler
-  sessionId={session?.id}
-  interviewActive={proctoringEnabled && !stopped && !paused && !isAnalyzing}
-  stompClient={stompClient.current}
-/>
+      <ProctoringHandler
+        sessionId={session?.id}
+        interviewActive={proctoringEnabled && !stopped && !paused && !isAnalyzing}
+        stompClient={stompClient.current}
+      />
+      
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes blink { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+      `}</style>
     </div>
   )
 }

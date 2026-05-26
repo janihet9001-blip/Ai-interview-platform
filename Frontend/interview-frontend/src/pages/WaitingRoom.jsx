@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import SockJS from 'sockjs-client'
 import { Client } from '@stomp/stompjs'
+import PropTypes from 'prop-types'
+import API from '../services/api'
 
 export default function WaitingRoom() {
   const { user, logout } = useAuth()
@@ -15,62 +17,266 @@ export default function WaitingRoom() {
   const [camStatus, setCamStatus] = useState('idle') // idle | loading | active | denied
   const [isMuted, setIsMuted] = useState(false)
   const [isCamOff, setIsCamOff] = useState(false)
+  const [error, setError] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(true)
 
-  // Block back button
+  // ✅ Check if user already has a completed session (prevent restart)
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      if (!user?.id) {
+        setCheckingSession(false)
+        return
+      }
+      
+      try {
+        // First, check if there's an active session for this user
+        const response = await API.get(`/interview/my-sessions`)
+        const sessions = response.data || []
+        
+        // Find the most recent session that is COMPLETED or ABANDONED
+        const completedSession = sessions.find(s => 
+          s.status === 'COMPLETED' || s.status === 'ABANDONED'
+        )
+        
+        if (completedSession) {
+          // User already completed an interview, redirect to results
+          setError('You have already completed an interview session.')
+          setTimeout(() => {
+            navigate(`/results/${completedSession.id}`, { replace: true })
+          }, 2000)
+          return
+        }
+      } catch (err) {
+        console.error('Failed to check existing sessions:', err)
+        // Continue to waiting room if check fails
+      } finally {
+        setCheckingSession(false)
+      }
+    }
+    
+    checkExistingSession()
+  }, [user, navigate])
+
+  // Block back button - improved with better cleanup
   useEffect(() => {
     window.history.pushState(null, '', window.location.href)
-    const handlePopState = () => window.history.pushState(null, '', window.location.href)
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href)
+    }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
-  // WebSocket for session start
+  // WebSocket for session start - with reconnection and error handling
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || checkingSession) return
+    
+    let isSubscribed = true
+    let reconnectTimeout = null
+    
     const client = new Client({
-webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
+      webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
       onConnect: () => {
+        if (!isSubscribed) return
+        console.log('WebSocket connected in waiting room')
         client.subscribe(`/topic/session/${user.id}`, (msg) => {
-          const data = JSON.parse(msg.body)
-          navigate(`/interview/${data.jobRole}?sessionId=${data.id}`)
+          try {
+            const data = JSON.parse(msg.body)
+            if (isSubscribed) {
+              navigate(`/interview/${data.jobRole}?sessionId=${data.id}`)
+            }
+          } catch (err) {
+            console.error('Failed to parse session start message:', err)
+            setError('Failed to start session. Please contact support.')
+          }
         })
       },
+      onDisconnect: () => {
+        console.log('WebSocket disconnected in waiting room')
+        if (isSubscribed) {
+          // Try to reconnect after delay
+          reconnectTimeout = setTimeout(() => {
+            if (isSubscribed && !client.connected) {
+              client.activate()
+            }
+          }, 3000)
+        }
+      },
+      onStompError: (frame) => {
+        console.error('STOMP error in waiting room:', frame)
+        setError('Connection error. Please refresh the page.')
+      },
+      onWebSocketError: (event) => {
+        console.error('WebSocket error:', event)
+        setError('Network connection issue. Please check your internet.')
+      }
     })
+    
     client.activate()
     stompClient.current = client
-    return () => client.deactivate()
-  }, [user, navigate])
-
-  // Start camera on mount
-  useEffect(() => {
-    let stream
-    async function startCamera() {
-      setCamStatus('loading')
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
-        setCamStatus('active')
-      } catch {
-        setCamStatus('denied')
+    
+    return () => {
+      isSubscribed = false
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
+      if (stompClient.current) {
+        try {
+          stompClient.current.deactivate()
+        } catch (e) {
+          // Ignore
+        }
+        stompClient.current = null
       }
     }
+  }, [user, navigate, checkingSession])
+
+  // Start camera on mount - with better error handling
+  useEffect(() => {
+    let mounted = true
+    let stream = null
+    
+    async function startCamera() {
+      if (!mounted) return
+      setCamStatus('loading')
+      setError(null)
+      
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: true, 
+          audio: true 
+        })
+        
+        if (!mounted) {
+          stream.getTracks().forEach(t => t.stop())
+          return
+        }
+        
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+        setCamStatus('active')
+      } catch (err) {
+        console.error('Camera error:', err)
+        if (!mounted) return
+        
+        if (err.name === 'NotAllowedError') {
+          setError('Camera access denied. Please allow camera in browser settings.')
+          setCamStatus('denied')
+        } else if (err.name === 'NotFoundError') {
+          setError('No camera found. Please connect a camera.')
+          setCamStatus('denied')
+        } else {
+          setError('Failed to access camera.')
+          setCamStatus('denied')
+        }
+      }
+    }
+    
     startCamera()
+    
     return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      mounted = false
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => {
+          t.stop()
+          t.enabled = false
+        })
+        streamRef.current = null
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
     }
   }, [])
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (!streamRef.current) return
-    streamRef.current.getAudioTracks().forEach(t => { t.enabled = isMuted })
-    setIsMuted(v => !v)
+    const audioTracks = streamRef.current.getAudioTracks()
+    audioTracks.forEach(track => {
+      track.enabled = !isMuted
+    })
+    setIsMuted(prev => !prev)
+  }, [isMuted])
+
+  const toggleCam = useCallback(() => {
+    if (!streamRef.current) return
+    const videoTracks = streamRef.current.getVideoTracks()
+    videoTracks.forEach(track => {
+      track.enabled = isCamOff
+    })
+    setIsCamOff(prev => !prev)
+  }, [isCamOff])
+
+  // Show loading state while checking session
+  if (checkingSession) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'var(--font-body)',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid var(--border)',
+            borderTopColor: '#2563EB',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px',
+          }} />
+          <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Checking your session...</p>
+        </div>
+      </div>
+    )
   }
 
-  const toggleCam = () => {
-    if (!streamRef.current) return
-    streamRef.current.getVideoTracks().forEach(t => { t.enabled = isCamOff })
-    setIsCamOff(v => !v)
+  // Show error state
+  if (error && !camStatus === 'loading') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'var(--font-body)',
+        padding: '32px 24px',
+      }}>
+        <div style={{
+          background: 'var(--surface)',
+          border: '1px solid #EF4444',
+          borderRadius: 'var(--radius-lg)',
+          padding: '32px',
+          textAlign: 'center',
+          maxWidth: '400px',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+          <h2 style={{ fontSize: '20px', color: '#EF4444', marginBottom: '12px' }}>Error</h2>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '24px' }}>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '10px 24px',
+              background: '#2563EB',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-body)',
+            }}
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -248,9 +454,21 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
                   <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
                 </svg>
                 <span style={{ ...overlayTextStyle, color: 'var(--red)' }}>Camera denied</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textAlign: 'center', padding: '0 12px' }}>
-                  Allow camera access in browser settings
-                </span>
+                <button
+                  onClick={() => window.location.reload()}
+                  style={{
+                    marginTop: '8px',
+                    padding: '6px 12px',
+                    background: '#2563EB',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: 'white',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Retry
+                </button>
               </div>
             )}
 
@@ -299,6 +517,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
               onClick={toggleMute}
               style={isMuted ? camBtnActiveStyle : camBtnStyle}
               title={isMuted ? 'Unmute' : 'Mute'}
+              disabled={camStatus !== 'active'}
             >
               {isMuted ? (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -321,6 +540,7 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
               onClick={toggleCam}
               style={isCamOff ? camBtnActiveStyle : camBtnStyle}
               title={isCamOff ? 'Turn on camera' : 'Turn off camera'}
+              disabled={camStatus !== 'active'}
             >
               {isCamOff ? (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -368,6 +588,10 @@ webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
 
       <style>{`
         @keyframes scanline { 0% { top: 0 } 100% { top: 100% } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
       `}</style>
     </div>
   )

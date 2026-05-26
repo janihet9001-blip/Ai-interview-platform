@@ -2,17 +2,66 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
+import PropTypes from 'prop-types'
 
 const STYLES = `
+<<<<<<< HEAD
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
   .lp-page {
     position: fixed !important;
     inset: 0 !important;
+=======
+  :root {
+    --bg-primary: #F8FAFC;
+    --bg-secondary: #FFFFFF;
+    --bg-tertiary: #F1F5F9;
+    --accent-50: #EEF2FF;
+    --accent-100: #E0E7FF;
+    --accent-200: #C7D2FE;
+    --accent-500: #6366F1;
+    --accent-600: #4F46E5;
+    --accent-700: #4338CA;
+    --text-primary: #0F172A;
+    --text-secondary: #334155;
+    --text-tertiary: #64748B;
+    --text-quaternary: #94A3B8;
+    --border-light: #E2E8F0;
+    --border-medium: #CBD5E1;
+    --border-focus: #818CF8;
+    --error: #EF4444;
+    --error-bg: #FEF2F2;
+    --shadow-3d: 0 20px 60px rgba(99, 102, 241, 0.12), 0 8px 20px rgba(0, 0, 0, 0.06);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+    --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-primary);
+  }
+
+  .login-page {
+    min-height: 100vh;
+>>>>>>> dd4a1be (Updated project)
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+<<<<<<< HEAD
     background: #020816;
     font-family: 'DM Sans', sans-serif;
     z-index: 0;
@@ -343,6 +392,449 @@ const STYLES = `
   }
 `
 
+=======
+  }
+
+  .bg-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+    will-change: transform;
+  }
+
+  .bg-orb-1 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+    top: -100px;
+    right: -100px;
+  }
+
+  .bg-orb-2 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
+    bottom: -80px;
+    left: -80px;
+  }
+
+  .bg-grid-pattern {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.15;
+    background-image: 
+      linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
+  }
+
+  .floating-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--accent-500);
+    opacity: 0;
+    will-change: transform, opacity;
+    animation: particleFloat linear infinite;
+  }
+
+  @keyframes particleFloat {
+    0% { transform: translateY(100vh) translateX(0) scale(0); opacity: 0; }
+    10% { opacity: 0.6; }
+    90% { opacity: 0.1; }
+    100% { transform: translateY(-10vh) translateX(var(--drift-x)) scale(1.5); opacity: 0; }
+  }
+
+  .login-container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 440px;
+    animation: cardEntry 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes cardEntry {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .auth-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-xl);
+    padding: 44px 40px 36px;
+    box-shadow: var(--shadow-3d);
+    transition: all var(--transition-smooth);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .auth-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-500), var(--accent-200), transparent);
+    opacity: 0;
+    transition: opacity var(--transition-smooth);
+  }
+
+  .auth-card:hover::before { opacity: 1; }
+
+  .auth-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 30px 80px rgba(99, 102, 241, 0.15), 0 10px 30px rgba(0, 0, 0, 0.08);
+  }
+
+  .card-shine {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .auth-card:hover .card-shine { opacity: 1; }
+
+  .brand-section {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  .logo-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    background: linear-gradient(135deg, #6366F1, #4F46E5);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+    transition: all var(--transition-spring);
+    cursor: pointer;
+  }
+
+  .logo-icon:hover {
+    transform: scale(1.1) rotate(10deg);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+  }
+
+  .logo-icon svg { width: 26px; height: 26px; }
+
+  .brand-name {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+
+  .brand-accent {
+    background: linear-gradient(135deg, #6366F1, #818CF8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .brand-tagline {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+
+  .form { display: flex; flex-direction: column; gap: 20px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+
+  .field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: color var(--transition-fast);
+  }
+
+  .field:focus-within .field-label { color: var(--accent-500); }
+
+  .input-wrap { position: relative; }
+
+  .input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1.5px solid var(--border-light);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+    transition: all var(--transition-base);
+  }
+
+  .input::placeholder { color: var(--text-quaternary); font-weight: 400; }
+  .input:hover { border-color: var(--border-medium); }
+  .input:focus {
+    border-color: var(--border-focus);
+    background: var(--bg-secondary);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.06);
+    transform: translateY(-1px);
+  }
+
+  .input-padding-right { padding-right: 44px; }
+
+  .toggle-password {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-quaternary);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    transition: all var(--transition-fast);
+  }
+
+  .toggle-password:hover { color: var(--accent-500); background: var(--accent-50); }
+
+  .row { display: flex; align-items: center; justify-content: space-between; }
+
+  .remember { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-medium);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-spring);
+    flex-shrink: 0;
+  }
+
+  .checkbox.active {
+    background: var(--accent-500);
+    border-color: var(--accent-500);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    transform: scale(1.1);
+  }
+
+  .remember-text { font-size: 13px; color: var(--text-tertiary); font-weight: 500; }
+
+  .forgot-link {
+    background: none;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-500);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all var(--transition-fast);
+  }
+
+  .forgot-link:hover { color: var(--accent-700); background: var(--accent-50); }
+
+  .error-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--error-bg);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--error);
+    font-size: 13px;
+    font-weight: 500;
+    animation: shakeError 0.4s ease;
+  }
+
+  @keyframes shakeError {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+
+  .error-icon { flex-shrink: 0; }
+
+  .submit-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #6366F1, #4F46E5);
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-smooth);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .submit-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4F46E5, #4338CA);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+    transform: translateY(-2px);
+  }
+
+  .submit-btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+  .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+  .divider-line { flex: 1; height: 1px; background: var(--border-light); }
+  .divider-text { font-size: 12px; color: var(--text-quaternary); font-weight: 500; }
+
+  .register-row { text-align: center; margin-bottom: 20px; }
+  .register-text { font-size: 14px; color: var(--text-tertiary); }
+
+  .register-link {
+    color: var(--accent-500);
+    font-weight: 600;
+    text-decoration: none;
+    margin-left: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all var(--transition-fast);
+  }
+
+  .register-link:hover { color: var(--accent-700); background: var(--accent-50); }
+
+  .features {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .feature-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--accent-50);
+    border: 1px solid var(--accent-100);
+    border-radius: 100px;
+    font-size: 11px;
+    color: var(--accent-600);
+    font-weight: 600;
+  }
+
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-500); }
+
+  .footer-text {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-quaternary);
+    line-height: 1.6;
+  }
+
+  .footer-link {
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-weight: 500;
+    transition: color var(--transition-fast);
+  }
+
+  .footer-link:hover { color: var(--accent-500); }
+
+  @media (max-width: 480px) {
+    .auth-card { padding: 32px 20px 28px; border-radius: var(--radius-lg); }
+    .brand-name { font-size: 22px; }
+    .login-container { padding: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+`
+
+// PropTypes for FloatingParticles
+FloatingParticles.propTypes = {
+  // No props needed
+}
+
+function FloatingParticles() {
+  const particles = useMemo(() => {
+    const arr = []
+    for (let i = 0; i < 5; i++) {
+      arr.push({
+        id: i,
+        left: Math.random() * 100 + '%',
+        size: Math.random() * 4 + 2 + 'px',
+        duration: Math.random() * 12 + 8 + 's',
+        delay: Math.random() * 10 + 's',
+        driftX: (Math.random() - 0.5) * 100 + 'px'
+      })
+    }
+    return arr
+  }, [])
+
+  return (
+    <div className="floating-particles" aria-hidden="true">
+      {particles.map(p => (
+        <div
+          key={p.id}
+          className="particle"
+          style={{
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+            '--drift-x': p.driftX
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+>>>>>>> dd4a1be (Updated project)
 export default function Login() {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -350,13 +842,31 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false)
   const [remember, setRemember] = useState(false)
   const [showPass, setShowPass] = useState(false)
+<<<<<<< HEAD
   const [focused,  setFocused]  = useState('')
+=======
+  const cardRef = useRef(null)
+  const emailInputRef = useRef(null)
+>>>>>>> dd4a1be (Updated project)
   const { login } = useAuth()
   const vantaRef    = useRef(null)
   const vantaEffect = useRef(null)
   const styleRef    = useRef(null)
 
+<<<<<<< HEAD
   /* inject CSS once */
+=======
+  // Load saved email from localStorage if remember me was checked
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail')
+    if (savedEmail) {
+      setEmail(savedEmail)
+      setRemember(true)
+    }
+  }, [])
+
+  // Inject styles
+>>>>>>> dd4a1be (Updated project)
   useEffect(() => {
     if (!document.getElementById('lp-styles')) {
       const el = document.createElement('style')
@@ -368,11 +878,14 @@ export default function Login() {
     return () => { document.getElementById('lp-styles')?.remove() }
   }, [])
 
+  // Clear session storage on mount
   useEffect(() => {
     sessionStorage.removeItem('token')
+    sessionStorage.removeItem('auth')
     sessionStorage.removeItem('user')
   }, [])
 
+<<<<<<< HEAD
   /* Vanta Globe */
   useEffect(() => {
     const loadScript = (src) =>
@@ -414,21 +927,93 @@ export default function Login() {
   }, [])
 
   const handleLogin = async (e) => {
+=======
+  // Focus email input on mount
+  useEffect(() => {
+    if (emailInputRef.current) {
+      emailInputRef.current.focus()
+    }
+  }, [])
+
+  const handleMouseMove = useCallback((e) => {
+    if (!cardRef.current) return
+    const rect = cardRef.current.getBoundingClientRect()
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    cardRef.current.style.setProperty('--mouse-x', x + '%')
+    cardRef.current.style.setProperty('--mouse-y', y + '%')
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    if (!cardRef.current) return
+    cardRef.current.style.setProperty('--mouse-x', '50%')
+    cardRef.current.style.setProperty('--mouse-y', '50%')
+  }, [])
+
+  // Handle remember me functionality
+  const handleRememberChange = useCallback(() => {
+    const newValue = !remember
+    setRemember(newValue)
+    if (!newValue) {
+      localStorage.removeItem('rememberedEmail')
+    }
+  }, [remember])
+
+  const handleSubmit = useCallback(async (e) => {
+>>>>>>> dd4a1be (Updated project)
     e.preventDefault()
+    
+    // Validation
+    if (!email.trim()) {
+      setError('Email is required')
+      return
+    }
+    if (!password) {
+      setError('Password is required')
+      return
+    }
+    if (!email.includes('@') || !email.includes('.')) {
+      setError('Please enter a valid email address')
+      return
+    }
+    
     setLoading(true)
     setError('')
+    
     try {
       const { data } = await api.post('/auth/login', { email, password })
+<<<<<<< HEAD
       login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
     } catch {
       setError('Invalid email or password')
       setLoading(false)
     }
   }
+=======
+      
+      // Save email if remember me is checked
+      if (remember) {
+        localStorage.setItem('rememberedEmail', email)
+      } else {
+        localStorage.removeItem('rememberedEmail')
+      }
+      
+      login(
+        { id: data.id, email: data.email, fullName: data.fullName, role: data.role },
+        data.token
+      )
+    } catch (err) {
+      const message = err.response?.data?.message || err.response?.data?.error || 'Invalid email or password. Please try again.'
+      setError(message)
+      setLoading(false)
+    }
+  }, [email, password, remember, login])
+>>>>>>> dd4a1be (Updated project)
 
   const TRUST = ['End-to-end encrypted', 'Zero-trust secure', 'Premium AI']
 
   return (
+<<<<<<< HEAD
     <div className="lp-page">
 
       {/* Vanta Globe bg */}
@@ -489,6 +1074,184 @@ export default function Login() {
             </svg>
           </div>
           <span className="lp-brand-name">Interview<span>AI</span></span>
+=======
+    <div className="login-page">
+      <div className="bg-orb bg-orb-1" aria-hidden="true" />
+      <div className="bg-orb bg-orb-2" aria-hidden="true" />
+      <div className="bg-grid-pattern" aria-hidden="true" />
+      <FloatingParticles />
+
+      <div className="login-container">
+        <div
+          ref={cardRef}
+          className="auth-card"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          <div className="card-shine" aria-hidden="true" />
+
+          <div className="brand-section">
+            <div className="logo-icon" aria-label="InterviewAI Logo">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 2L14.5 7.5L20 8L16 12.5L17 18L12 15L7 18L8 12.5L4 8L9.5 7.5L12 2Z" fill="white" />
+              </svg>
+            </div>
+            <h1 className="brand-name">
+              Interview<span className="brand-accent">AI</span>
+            </h1>
+            <p className="brand-tagline">Sign in to your account</p>
+          </div>
+
+          <form className="form" onSubmit={handleSubmit} autoComplete="off" noValidate>
+            <div className="field">
+              <label className="field-label" htmlFor="email">
+                Email address
+              </label>
+              <input
+                ref={emailInputRef}
+                id="email"
+                type="email"
+                className="input"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                aria-label="Email address"
+                aria-invalid={!!error}
+              />
+            </div>
+
+            <div className="field">
+              <label className="field-label" htmlFor="password">
+                Password
+              </label>
+              <div className="input-wrap">
+                <input
+                  id="password"
+                  type={showPass ? 'text' : 'password'}
+                  className="input input-padding-right"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  aria-label="Password"
+                  aria-invalid={!!error}
+                />
+                <button
+                  type="button"
+                  className="toggle-password"
+                  onClick={() => setShowPass(prev => !prev)}
+                  tabIndex={-1}
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                >
+                  {showPass ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="row">
+              <div 
+                className="remember" 
+                onClick={handleRememberChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleRememberChange()
+                  }
+                }}
+                role="checkbox"
+                aria-checked={remember}
+                tabIndex={0}
+              >
+                <div className={`checkbox${remember ? ' active' : ''}`} aria-hidden="true">
+                  {remember && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 4l3 3 5-6" />
+                    </svg>
+                  )}
+                </div>
+                <span className="remember-text">Remember me</span>
+              </div>
+              <button 
+                type="button" 
+                className="forgot-link"
+                onClick={() => {
+                  // Forgot password functionality can be added here
+                  alert('Password reset link will be sent to your email')
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+
+            {error && (
+              <div className="error-box" role="alert" aria-live="polite">
+                <svg className="error-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                {error}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              className="submit-btn" 
+              disabled={loading}
+              aria-busy={loading}
+            >
+              {loading && <div className="spinner" aria-hidden="true" />}
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+
+          <div className="divider" role="separator">
+            <div className="divider-line" />
+            <span className="divider-text">or</span>
+            <div className="divider-line" />
+          </div>
+
+          <div className="register-row">
+            <span className="register-text">
+              Don&apos;t have an account?
+              <Link to="/register" className="register-link">Create one</Link>
+            </span>
+          </div>
+
+          <div className="features">
+            {features.map((item) => (
+              <div key={item} className="feature-badge">
+                <span className="badge-dot" aria-hidden="true" />
+                {item}
+              </div>
+            ))}
+          </div>
+
+          <p className="footer-text">
+            By signing in, you agree to our{' '}
+            <span className="footer-link" role="button" tabIndex={0} onClick={() => alert('Terms of Service')}>
+              Terms of Service
+            </span>{' '}
+            and{' '}
+            <span className="footer-link" role="button" tabIndex={0} onClick={() => alert('Privacy Policy')}>
+              Privacy Policy
+            </span>
+          </p>
+>>>>>>> dd4a1be (Updated project)
         </div>
 
         <h1 className="lp-h1">Welcome back.</h1>

@@ -1,10 +1,9 @@
 import axios from 'axios'
 
 const API = axios.create({
-baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+  baseURL: import.meta.env.VITE_API_URL || '/api'  // ← remove hardcoded localhost:8080
 })
 
-// Automatically attach JWT token to every request
 API.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('token')
   if (token) {
