@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
-import Login from './pages/Login'
-import Register from './pages/Register'
+import AuthPage from './pages/AuthPage'
 import Dashboard from './pages/Dashboard'
 import Interviews from './pages/Interviews'
 import Results from './pages/Results'
@@ -27,10 +26,9 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<AuthPage />} />
+      <Route path="/register" element={<AuthPage />} />
 
-      {/* CANDIDATE routes */}
       <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/interview/:role" element={<PrivateRoute><Interviews /></PrivateRoute>} />
       <Route path="/results/:sessionId" element={<PrivateRoute><Results /></PrivateRoute>} />
@@ -39,9 +37,7 @@ function App() {
       <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
       <Route path="/waiting" element={<PrivateRoute><WaitingRoom /></PrivateRoute>} />
 
-      {/* RECRUITER routes — ADMIN only */}
       <Route path="/recruiter" element={<AdminRoute><RecruiterDashboard /></AdminRoute>} />
-
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

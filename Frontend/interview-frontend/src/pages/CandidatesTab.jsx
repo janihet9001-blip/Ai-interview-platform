@@ -77,10 +77,16 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
             const totalScore = qs.reduce((a, q) => a + (q.score || 0), 0)
             const maxScore = qs.length * 10
             const pct = Math.round((totalScore / maxScore) * 100)
-            setApiRemarks(prev => ({
-              ...prev,
-              [s.id]: `${pct}% score · ${qs.length} questions answered with AI feedback`
-            }))
+const topFeedback = qs
+  .sort((a, b) => (b.score || 0) - (a.score || 0))
+  .slice(0, 2)
+  .map(q => `• ${q.aiFeedback}`)
+  .join('\n\n')
+
+setApiRemarks(prev => ({
+  ...prev,
+  [s.id]: `Overall ${pct}% — ${qs.length} questions answered.\n\n${topFeedback}`
+}))
           })
           .catch(() => {})
       }
@@ -271,9 +277,9 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                         <span style={{ fontSize: '15px' }}>🤖</span>
                         <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#A78BFA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>AI Remark</span>
                       </div>
-                      <p style={{ fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7', fontStyle: aiRemark ? 'normal' : 'italic' }}>
-                        {aiRemark || 'No AI analysis available for this session.'}
-                      </p>
+<p style={{ fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7', fontStyle: aiRemark ? 'normal' : 'italic', whiteSpace: 'pre-line' }}>
+  {aiRemark || 'No AI analysis available for this session.'}
+</p>
                     </div>
 
                     <div style={{ padding: '16px', borderRadius: 'var(--radius)', background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: '3px solid #2563EB' }}>
