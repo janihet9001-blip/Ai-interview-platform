@@ -2,18 +2,39 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
+import { useTheme } from '../context/ThemeContext'
 
 export default function Login() {
-  const [email,    setEmail]    = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error,    setError]    = useState('')
-  const [loading,  setLoading]  = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const [remember, setRemember] = useState(false)
   const [showPass, setShowPass] = useState(false)
-  const [focused,  setFocused]  = useState('')
+  const [focused, setFocused] = useState('')
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('theme')
+    return saved || 'dark'
+  })
   const { login } = useAuth()
-  const vantaRef    = useRef(null)
+  const vantaRef = useRef(null)
   const vantaEffect = useRef(null)
+
+  // Apply theme to html element
+  useEffect(() => {
+    localStorage.setItem('theme', theme)
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+      document.documentElement.classList.remove('light')
+    } else {
+      document.documentElement.classList.add('light')
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+  }
 
   useEffect(() => {
     sessionStorage.removeItem('token')
@@ -25,7 +46,6 @@ export default function Login() {
 
     const loadScript = (src) =>
       new Promise((resolve, reject) => {
-        // if already loaded and global is ready, resolve immediately
         if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
         const s = document.createElement('script')
         s.src = src
@@ -37,7 +57,6 @@ export default function Login() {
     const initVanta = () => {
       if (!vantaRef.current || vantaEffect.current) return
       if (!window.VANTA || !window.VANTA.GLOBE) {
-        // VANTA not ready yet — retry after 100ms
         retryTimer = setTimeout(initVanta, 100)
         return
       }
@@ -51,9 +70,9 @@ export default function Login() {
           minWidth: 200,
           scale: 1.0,
           scaleMobile: 1.0,
-          color: 0x8E9AA8,
-          color2: 0x4A5568,
-          backgroundColor: 0x06080D,
+          color: theme === 'dark' ? 0x8E9AA8 : 0x475569,
+          color2: theme === 'dark' ? 0x4A5568 : 0x94A3B8,
+          backgroundColor: theme === 'dark' ? 0x06080D : 0xFFFFFF,
           points: 10,
           maxDistance: 22,
           spacing: 20,
@@ -82,11 +101,12 @@ export default function Login() {
         vantaEffect.current = null
       }
     }
-  }, [])
+  }, [theme])
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    setLoading(true); setError('')
+    setLoading(true)
+    setError('')
     try {
       const { data } = await api.post('/auth/login', { email, password })
       login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
@@ -99,7 +119,7 @@ export default function Login() {
   const trackMouse = (e) => {
     const r = e.currentTarget.getBoundingClientRect()
     e.currentTarget.style.setProperty('--mouse-x', `${((e.clientX - r.left) / r.width) * 100}%`)
-    e.currentTarget.style.setProperty('--mouse-y', `${((e.clientY - r.top)  / r.height) * 100}%`)
+    e.currentTarget.style.setProperty('--mouse-y', `${((e.clientY - r.top) / r.height) * 100}%`)
   }
 
   return (
@@ -107,22 +127,37 @@ export default function Login() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-        :root {
-          --bg-dark:         #0A0C12;
-          --bg-darker:       #06080D;
-          --bg-surface:      #0F121A;
-          --bg-surface-light:#151A24;
-          --border:          rgba(255,255,255,0.05);
-          --border-light:    rgba(255,255,255,0.08);
-          --text:            #E8EDF2;
-          --text-dim:        #8E9AA8;
-          --text-muted:      #4A5568;
-          --font-mono:       'JetBrains Mono', monospace;
-          --font-display:    'Inter', system-ui, sans-serif;
-          --font-body:       'Inter', system-ui, sans-serif;
-          --radius:          12px;
-          --radius-sm:       8px;
-          --radius-lg:       16px;
+        /* Dark Theme (default) */
+        :root,
+        .dark {
+          --bg-dark: #0A0C12;
+          --bg-darker: #06080D;
+          --bg-surface: #0F121A;
+          --bg-surface-light: #151A24;
+          --border: rgba(255,255,255,0.05);
+          --border-light: rgba(255,255,255,0.08);
+          --text: #E8EDF2;
+          --text-dim: #8E9AA8;
+          --text-muted: #4A5568;
+          --vanta-color: 0x8E9AA8;
+          --vanta-color2: 0x4A5568;
+          --vanta-bg: 0x06080D;
+        }
+
+        /* Light Theme */
+        .light {
+          --bg-dark: #F8FAFC;
+          --bg-darker: #FFFFFF;
+          --bg-surface: #FFFFFF;
+          --bg-surface-light: #F1F5F9;
+          --border: rgba(0, 0, 0, 0.08);
+          --border-light: rgba(0, 0, 0, 0.05);
+          --text: #0F172A;
+          --text-dim: #475569;
+          --text-muted: #64748B;
+          --vanta-color: 0x475569;
+          --vanta-color2: 0x94A3B8;
+          --vanta-bg: 0xFFFFFF;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -147,12 +182,21 @@ export default function Login() {
             radial-gradient(ellipse 50% 35% at 85% 80%, rgba(20,30,50,0.25) 0%, transparent 60%);
         }
 
+        .light .scene-bg {
+          background:
+            radial-gradient(ellipse 60% 40% at 20% 10%, rgba(0,0,0,0.03) 0%, transparent 55%),
+            radial-gradient(ellipse 50% 35% at 85% 80%, rgba(0,0,0,0.02) 0%, transparent 60%);
+        }
+
         /* particles */
         .lp-particles { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
         .lp-particle  {
           position: absolute; bottom: -10px; border-radius: 50%;
           background: rgba(255,255,255,0.12);
           animation: lpRise linear infinite;
+        }
+        .light .lp-particle {
+          background: rgba(0,0,0,0.08);
         }
         @keyframes lpRise {
           0%   { transform: translateY(0) scale(1);        opacity: 0; }
@@ -173,6 +217,9 @@ export default function Login() {
           width: 80px; height: 80px;
           animation: lpRing 12s ease-out infinite;
         }
+        .light .lp-ring {
+          border: 1px solid rgba(0,0,0,0.08);
+        }
         @keyframes lpRing {
           0%   { width:  80px; height:  80px; opacity: 0.5; }
           100% { width: 900px; height: 900px; opacity: 0;   }
@@ -188,6 +235,10 @@ export default function Login() {
           font-family: var(--font-mono); font-size: 10px;
           letter-spacing: 2px; color: var(--text-dim);
           white-space: nowrap; backdrop-filter: blur(12px); z-index: 10;
+        }
+        .light .lp-top-badge {
+          background: rgba(255,255,255,0.9);
+          border: 1px solid rgba(0,0,0,0.08);
         }
         .lp-badge-dot {
           width: 6px; height: 6px; border-radius: 50%;
@@ -205,7 +256,11 @@ export default function Login() {
           backdrop-filter: blur(12px); z-index: 10;
           animation: chipFloat 5s ease-in-out infinite;
         }
-        .lp-chip-v { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: #fff; line-height: 1; }
+        .light .lp-chip {
+          background: linear-gradient(145deg, #FFFFFF 0%, #F1F5F9 100%);
+          border: 1px solid rgba(0,0,0,0.06);
+        }
+        .lp-chip-v { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--text); line-height: 1; }
         .lp-chip-l { font-size: 9px; color: var(--text-dim); font-weight: 600; letter-spacing: .5px; margin-top: 3px; font-family: var(--font-mono); }
         .lp-chip-a { top: 18%; left: 5%;  animation-delay: 0s;   }
         .lp-chip-b { top: 18%; right: 5%; animation-delay: 1.6s; }
@@ -226,13 +281,22 @@ export default function Login() {
           transition: border-color .3s, box-shadow .3s;
           isolation: isolate;
         }
+        .light .login-card {
+          background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          box-shadow: 0 8px 60px rgba(0, 0, 0, 0.06), inset 0 0 80px rgba(0, 0, 0, 0.01);
+        }
         .login-card::-webkit-scrollbar { display: none; }
         .login-card::before {
           content: ''; position: absolute; inset: 0; border-radius: 20px;
           background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
           opacity: 0; transition: opacity .25s ease; pointer-events: none;
         }
+        .light .login-card::before {
+          background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.01) 40%, transparent 70%);
+        }
         .login-card:hover { border-color: rgba(255,255,255,0.18); }
+        .light .login-card:hover { border-color: rgba(0,0,0,0.15); }
         .login-card:hover::before { opacity: 1; }
         @keyframes cardIn {
           from { opacity:0; transform:translateY(24px) scale(.97); }
@@ -245,6 +309,9 @@ export default function Login() {
           background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), rgba(255,255,255,0.08), transparent);
           border-radius: 20px 20px 0 0; pointer-events: none;
         }
+        .light .card-shimmer {
+          background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), rgba(0,0,0,0.05), transparent);
+        }
 
         /* brand */
         .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; justify-content: center; }
@@ -255,6 +322,10 @@ export default function Login() {
           border-radius: 11px; display: flex; align-items: center; justify-content: center;
           box-shadow: 0 0 12px rgba(255,255,255,0.06); flex-shrink: 0;
         }
+        .light .login-logo-box {
+          background: rgba(0,0,0,0.04);
+          border: 1px solid rgba(0,0,0,0.08);
+        }
         .login-brand-name {
           font-family: var(--font-display); font-size: 20px; font-weight: 800;
           background: linear-gradient(110deg, #FFFFFF 20%, #8E9AA8 50%, #FFFFFF 80%);
@@ -262,18 +333,26 @@ export default function Login() {
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           animation: shimmerText 4s linear infinite; letter-spacing: -.02em;
         }
+        .light .login-brand-name {
+          background: linear-gradient(110deg, #1E293B 20%, #64748B 50%, #1E293B 80%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
         @keyframes shimmerText { 0%{background-position:200% center} 100%{background-position:-200% center} }
 
         /* heading */
         .login-h1 {
           font-family: var(--font-display); font-size: 26px; font-weight: 800;
-          color: #fff; text-align: center; letter-spacing: -.03em; margin-bottom: 6px;
+          color: var(--text); text-align: center; letter-spacing: -.03em; margin-bottom: 6px;
         }
         .login-sub {
           font-size: 11px; color: var(--text-muted); text-align: left;
           margin-bottom: 26px; padding-left: 12px;
           border-left: 2px solid rgba(255,255,255,0.12); line-height: 1.5;
           font-family: var(--font-mono); letter-spacing: .03em;
+        }
+        .light .login-sub {
+          border-left: 2px solid rgba(0,0,0,0.1);
         }
 
         /* field */
@@ -286,7 +365,6 @@ export default function Login() {
         }
         .lp-label svg { flex-shrink: 0; transition: color .2s; }
         .lp-field-active .lp-label { color: var(--text-dim); }
-        .lp-field-active .lp-label svg { color: #8E9AA8; }
 
         .lp-iw { position: relative; display: flex; align-items: center; }
         .lp-input {
@@ -296,12 +374,23 @@ export default function Login() {
           color: var(--text); font-family: var(--font-body); font-size: 13px;
           outline: none; transition: border-color .2s, box-shadow .2s, background .2s;
         }
+        .light .lp-input {
+          background: rgba(0, 0, 0, 0.02);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          color: #0F172A;
+        }
         .lp-input::placeholder { color: var(--text-muted); }
         .lp-input:hover:not(:focus) { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); }
+        .light .lp-input:hover:not(:focus) { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.03); }
         .lp-input:focus {
           border-color: rgba(255,255,255,0.28);
           box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
           background: rgba(255,255,255,0.06);
+        }
+        .light .lp-input:focus {
+          border-color: rgba(0,0,0,0.25);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.03);
+          background: rgba(0,0,0,0.04);
         }
         .lp-input-p { padding-right: 42px; }
         .lp-eye {
@@ -311,6 +400,7 @@ export default function Login() {
           border-radius: 6px; transition: color .15s, background .15s;
         }
         .lp-eye:hover { color: var(--text-dim); background: rgba(255,255,255,0.06); }
+        .light .lp-eye:hover { background: rgba(0,0,0,0.04); }
 
         /* row */
         .lp-row {
@@ -331,7 +421,12 @@ export default function Login() {
           display: flex; align-items: center; justify-content: center;
           flex-shrink: 0; transition: all .2s;
         }
+        .light .lp-chk {
+          border: 1px solid rgba(0,0,0,0.15);
+          background: rgba(0,0,0,0.02);
+        }
         .lp-chk-on { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); }
+        .light .lp-chk-on { background: rgba(0,0,0,0.08); border-color: rgba(0,0,0,0.25); }
         .lp-forgot {
           background: none; border: none; font-family: var(--font-body);
           font-size: 12px; font-weight: 600; color: var(--text-dim);
@@ -361,14 +456,27 @@ export default function Login() {
           position: relative; overflow: hidden; letter-spacing: .01em;
           display: flex; align-items: center; justify-content: center; gap: 10px;
         }
+        .light .btn-launch {
+          background: rgba(0, 0, 0, 0.05);
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          color: #0F172A;
+        }
         .btn-launch::before {
           content: ''; position: absolute; inset: 0;
           background: radial-gradient(circle 150px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 40%, transparent 70%);
           opacity: 0; transition: opacity .25s ease; pointer-events: none;
         }
+        .light .btn-launch::before {
+          background: radial-gradient(circle 150px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.03) 40%, transparent 70%);
+        }
         .btn-launch:hover:not(:disabled) {
           background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.38);
           transform: translateY(-2px); box-shadow: 0 4px 20px rgba(255,255,255,0.07);
+        }
+        .light .btn-launch:hover:not(:disabled) {
+          background: rgba(0, 0, 0, 0.1);
+          border-color: rgba(0, 0, 0, 0.25);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         }
         .btn-launch:hover:not(:disabled)::before { opacity: 1; }
         .btn-launch:active:not(:disabled) { transform: translateY(0); }
@@ -379,6 +487,10 @@ export default function Login() {
           width: 14px; height: 14px;
           border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff;
           border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0;
+        }
+        .light .lp-spinner {
+          border: 2px solid rgba(0,0,0,0.2);
+          border-top-color: #0F172A;
         }
         @keyframes spin { to{transform:rotate(360deg)} }
 
@@ -411,7 +523,12 @@ export default function Login() {
           font-family: var(--font-mono); letter-spacing: .3px;
           transition: background .2s, border-color .2s;
         }
+        .light .lp-tbadge {
+          background: rgba(0, 0, 0, 0.03);
+          border: 1px solid rgba(0, 0, 0, 0.06);
+        }
         .lp-tbadge:hover { background: rgba(255,255,255,0.07); border-color: var(--border-light); color: var(--text-dim); }
+        .light .lp-tbadge:hover { background: rgba(0, 0, 0, 0.06); color: var(--text); }
 
         /* footer */
         .lp-footer { text-align: center; font-size: 10.5px; color: var(--text-muted); }
@@ -421,7 +538,9 @@ export default function Login() {
         /* scrollbar */
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        .light ::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); }
 
         @media(max-width:500px){
           .login-card{width:92vw;padding:28px 18px 24px}
@@ -442,11 +561,11 @@ export default function Login() {
         <div className="lp-particles">
           {Array.from({ length: 20 }).map((_, i) => (
             <div key={i} className="lp-particle" style={{
-              left:              `${(i * 37 + 11) % 100}%`,
-              width:             `${(i % 3) + 2}px`,
-              height:            `${(i % 3) + 2}px`,
+              left: `${(i * 37 + 11) % 100}%`,
+              width: `${(i % 3) + 2}px`,
+              height: `${(i % 3) + 2}px`,
               animationDuration: `${10 + (i % 7) * 2}s`,
-              animationDelay:    `${(i * 1.3) % 11}s`,
+              animationDelay: `${(i * 1.3) % 11}s`,
             }} />
           ))}
         </div>
@@ -486,9 +605,9 @@ export default function Login() {
           <div className="login-brand">
             <div className="login-logo-box">
               <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-                <rect x="4" y="4" width="24" height="24" rx="6" stroke="white" strokeWidth="1.5"/>
-                <path d="M12 14L16 18L20 14" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-                <circle cx="16" cy="16" r="2.5" fill="white"/>
+                <rect x="4" y="4" width="24" height="24" rx="6" stroke="currentColor" strokeWidth="1.5" color="var(--text)"/>
+                <path d="M12 14L16 18L20 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <circle cx="16" cy="16" r="2.5" fill="currentColor"/>
               </svg>
             </div>
             <span className="login-brand-name">InterviewAI</span>
@@ -557,7 +676,7 @@ export default function Login() {
               <label className="lp-remember" onClick={() => setRemember(p => !p)}>
                 <div className={`lp-chk${remember ? ' lp-chk-on' : ''}`}>
                   {remember && (
-                    <svg width="8" height="6" viewBox="0 0 10 8" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="8" height="6" viewBox="0 0 10 8" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M1 4l2.5 2.5L9 1"/>
                     </svg>
                   )}
@@ -612,6 +731,65 @@ export default function Login() {
             <span>Terms of Service</span> and <span>Privacy Policy</span>.
           </p>
         </div>
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 1000,
+            width: '44px',
+            height: '44px',
+            borderRadius: '40px',
+            background: theme === 'dark' 
+              ? 'linear-gradient(135deg, #0F121A, #151A24)'
+              : 'linear-gradient(135deg, #FFFFFF, #F1F5F9)',
+            border: theme === 'dark' 
+              ? '1px solid rgba(255,255,255,0.15)'
+              : '1px solid rgba(0,0,0,0.1)',
+            boxShadow: theme === 'dark'
+              ? '0 4px 20px rgba(0,0,0,0.3)'
+              : '0 4px 20px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease',
+            backdropFilter: 'blur(10px)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.1)'
+            e.currentTarget.style.boxShadow = theme === 'dark'
+              ? '0 0 20px rgba(255,255,255,0.15)'
+              : '0 0 20px rgba(0,0,0,0.15)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = theme === 'dark'
+              ? '0 4px 20px rgba(0,0,0,0.3)'
+              : '0 4px 20px rgba(0,0,0,0.08)'
+          }}
+        >
+          {theme === 'dark' ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8EDF2" strokeWidth="2">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+        </button>
 
       </div>
     </>

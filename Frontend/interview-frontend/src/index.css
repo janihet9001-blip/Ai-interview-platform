@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap');
 
-:root {
+/* Dark Theme (default) */
+:root,
+.dark {
   --bg: #080C14;
   --bg2: #0D1117;
   --surface: #0F1623;
@@ -27,13 +29,41 @@
   --radius-lg: 16px;
 }
 
+/* Light Theme */
+.light {
+  --bg: #F8FAFC;
+  --bg2: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface2: #F1F5F9;
+  --surface3: #E2E8F0;
+  --border: #CBD5E1;
+  --border-bright: #94A3B8;
+  --text: #0F172A;
+  --text-dim: #475569;
+  --text-muted: #64748B;
+  --accent: #4F46E5;
+  --accent-hover: #6366F1;
+  --cyan: #0891B2;
+  --green: #059669;
+  --orange: #EA580C;
+  --red: #DC2626;
+  --purple: #7C3AED;
+  --glow-blue: 0 0 20px #4F46E530;
+  --glow-cyan: 0 0 20px #06B6D430;
+  --radius: 10px;
+  --radius-lg: 16px;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html { scroll-behavior: smooth; }
+html { 
+  scroll-behavior: smooth;
+  transition: background-color 0.3s ease;
+}
 
 body {
   background: var(--bg);
@@ -42,17 +72,35 @@ body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.2s ease;
+}
+
+/* Dark theme body background */
+.dark body {
   background-image:
     radial-gradient(ellipse 80% 50% at 50% -20%, #2563EB18, transparent),
     linear-gradient(to bottom, transparent 0%, #080C14 100%);
-  min-height: 100vh;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+/* Light theme body background */
+.light body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, #4F46E518, transparent),
+    linear-gradient(to bottom, transparent 0%, #F8FAFC 100%);
+}
+
+/* Scrollbar - Dark */
+.dark ::-webkit-scrollbar { width: 4px; }
+.dark ::-webkit-scrollbar-track { background: var(--bg); }
+.dark ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Scrollbar - Light */
+.light ::-webkit-scrollbar { width: 4px; }
+.light ::-webkit-scrollbar-track { background: #E2E8F0; }
+.light ::-webkit-scrollbar-thumb { background: #94A3B8; border-radius: 4px; }
+.light ::-webkit-scrollbar-thumb:hover { background: #64748B; }
 
 /* Button base */
 button {
@@ -79,6 +127,14 @@ body:not(.lp-active)::before {
   opacity: 0.15;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Light mode grid overlay */
+.light body:not(.lp-active)::before {
+  background-image:
+    linear-gradient(#CBD5E1 1px, transparent 1px),
+    linear-gradient(90deg, #CBD5E1 1px, transparent 1px);
+  opacity: 0.3;
 }
 
 /* All content above grid */
@@ -108,6 +164,13 @@ body:not(.lp-active)::before {
 .badge-red    { background: #EF444420; color: #F87171; border: 1px solid #EF444440; }
 .badge-cyan   { background: #06B6D420; color: #22D3EE; border: 1px solid #06B6D440; }
 
+/* Light mode badge overrides */
+.light .badge-blue   { background: #4F46E520; color: #4F46E5; border: 1px solid #4F46E540; }
+.light .badge-green  { background: #05966920; color: #059669; border: 1px solid #05966940; }
+.light .badge-orange { background: #EA580C20; color: #EA580C; border: 1px solid #EA580C40; }
+.light .badge-red    { background: #DC262620; color: #DC2626; border: 1px solid #DC262640; }
+.light .badge-cyan   { background: #0891B220; color: #0891B2; border: 1px solid #0891B240; }
+
 /* Card */
 .card {
   background: var(--surface);
@@ -118,6 +181,11 @@ body:not(.lp-active)::before {
 .card:hover {
   border-color: var(--border-bright);
   box-shadow: var(--glow-blue);
+}
+
+/* Light mode card hover */
+.light .card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 /* Primary button */
@@ -178,6 +246,11 @@ body:not(.lp-active)::before {
 }
 .input::placeholder { color: var(--text-muted); }
 
+/* Light mode input focus */
+.light .input:focus {
+  box-shadow: 0 0 0 3px #4F46E520;
+}
+
 /* Divider */
 .divider {
   height: 1px;
@@ -210,3 +283,8 @@ body:not(.lp-active)::before {
 .animate-fade-up    { animation: fadeUp 0.5s ease forwards; }
 .animate-fade-in    { animation: fadeIn 0.4s ease forwards; }
 .animate-pulse-glow { animation: pulse-glow 2s ease infinite; }
+
+/* Smooth transition for theme switching */
+* {
+  transition: background-color 0.3s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}

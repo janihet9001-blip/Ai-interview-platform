@@ -7,6 +7,7 @@ import { Client } from '@stomp/stompjs'
 import ResumeScreeningTab from './ResumeScreeningTab'
 import CandidatesTab from './CandidatesTab'
 import PropTypes from 'prop-types'
+import { useTheme } from '../context/ThemeContext'
 
 const JOB_ROLES = ['JAVA_DEVELOPER', 'PYTHON_DEVELOPER', 'REACT_DEVELOPER']
 
