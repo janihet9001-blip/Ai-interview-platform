@@ -153,17 +153,29 @@ export default function Interviews() {
 
   // Back button prevention
   useEffect(() => {
+    window.history.replaceState(null, '', window.location.href)
     window.history.pushState(null, '', window.location.href)
+
     const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href) // block immediately
+
       const confirmEnd = window.confirm('Going back will end your interview. Are you sure?')
       if (confirmEnd) {
+        speechQueueRef.current = []
+        isSpeakingRef.current = false
         window.speechSynthesis.cancel()
-        stompClient.current?.deactivate()
-        navigate(`/results/${sessionRef.current?.id}`, { replace: true })
-      } else {
-        window.history.pushState(null, '', window.location.href)
+        if (stompClient.current) {
+          try { stompClient.current.deactivate() } catch (e) {}
+        }
+        const resultId = sessionRef.current?.id
+        if (resultId) {
+          navigate(`/results/${resultId}`, { replace: true })
+        } else {
+          navigate('/dashboard', { replace: true })
+        }
       }
     }
+
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [navigate])
@@ -182,7 +194,7 @@ export default function Interviews() {
   const [paused, setPaused] = useState(false)
   const [stopped, setStopped] = useState(false)
   const [recruiterQuestion, setRecruiterQuestion] = useState(null)
-  
+
   const [allAnswers, setAllAnswers] = useState({})
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showWarning, setShowWarning] = useState(false)
@@ -202,6 +214,8 @@ export default function Interviews() {
   const chatEndRef = useRef(null)
   const sessionStarted = useRef(false)
   const spokenRef = useRef(new Set())
+  const speechQueueRef = useRef([])       // ✅ speech queue
+  const isSpeakingRef = useRef(false)     // ✅ speaking flag
   const [showCamera, setShowCamera] = useState(false)
 
   const accent = roleColors[role] || '#2563EB'
@@ -218,29 +232,18 @@ export default function Interviews() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, submitting])
 
-  // ✅ Cleanup on unmount - prevents memory leaks
+  // ✅ Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Clean up speech recognition
       if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop()
-        } catch (e) {
-          // Ignore errors if already stopped
-        }
+        try { recognitionRef.current.stop() } catch (e) {}
         recognitionRef.current = null
       }
-      
-      // Cancel any ongoing speech
+      speechQueueRef.current = []
+      isSpeakingRef.current = false
       window.speechSynthesis.cancel()
-      
-      // Clean up WebSocket
       if (stompClient.current) {
-        try {
-          stompClient.current.deactivate()
-        } catch (e) {
-          // Ignore
-        }
+        try { stompClient.current.deactivate() } catch (e) {}
       }
     }
   }, [])
@@ -263,42 +266,40 @@ export default function Interviews() {
     return () => clearInterval(interval)
   }, [showTerminated, navigate])
 
+  // ✅ Process speech queue - one utterance at a time with pause between
+  const processSpeechQueue = () => {
+    if (isSpeakingRef.current || speechQueueRef.current.length === 0) return
+    isSpeakingRef.current = true
+    const text = speechQueueRef.current.shift()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 0.92
+    utterance.pitch = 1
+    utterance.volume = 1
+    utterance.onend = () => {
+      isSpeakingRef.current = false
+      setTimeout(processSpeechQueue, 350) // natural pause between utterances
+    }
+    utterance.onerror = () => {
+      isSpeakingRef.current = false
+      setTimeout(processSpeechQueue, 350)
+    }
+    window.speechSynthesis.speak(utterance)
+  }
+
+  // ✅ botSay - uses speech queue, no duplicate messages
   const botSay = (text) => {
     if (spokenRef.current.has(text)) return
     spokenRef.current.add(text)
-    
     setMessages(prev => [...prev, { from: 'bot', text }])
-
-    const speakWhenReady = () => {
-      if (window.speechSynthesis.speaking) {
-        setTimeout(speakWhenReady, 100)
-        return
-      }
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 0.95
-      utterance.pitch = 1
-      utterance.volume = 1
-      window.speechSynthesis.speak(utterance)
-    }
-    speakWhenReady()
+    speechQueueRef.current.push(text)
+    processSpeechQueue()
   }
 
+  // ✅ interviewerSay - also uses speech queue
   const interviewerSay = (text) => {
     setMessages(prev => [...prev, { from: 'interviewer', text }])
-    
-    const speakWhenReady = () => {
-      if (window.speechSynthesis.speaking) {
-        setTimeout(speakWhenReady, 100)
-        return
-      }
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 0.95
-      utterance.pitch = 1
-      utterance.volume = 1
-      window.speechSynthesis.speak(utterance)
-    }
-    
-    speakWhenReady()
+    speechQueueRef.current.push(text)
+    processSpeechQueue()
   }
 
   const userSay = (text) => {
@@ -306,12 +307,12 @@ export default function Interviews() {
   }
 
   const analyzeAllAnswers = async (sessionId, questionsList) => {
-    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-    if (!apiKey) { console.error('Groq API key missing'); return []; }
+    const apiKey = import.meta.env.VITE_GROQ_API_KEY
+    if (!apiKey) { console.error('Groq API key missing'); return [] }
 
-    const results = [];
+    const results = []
     for (const q of questionsList) {
-      if (!q.userAnswer || q.userAnswer.trim() === '') continue;
+      if (!q.userAnswer || q.userAnswer.trim() === '') continue
       try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -339,14 +340,14 @@ Respond ONLY with a raw JSON object:
               { role: 'user', content: `Question: ${q.questiontext}\n\nAnswer: ${q.userAnswer}` }
             ]
           })
-        });
-        const data = await response.json();
-        let parsed;
+        })
+        const data = await response.json()
+        let parsed
         try {
-          const text = data.choices[0].message.content;
-          parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+          const text = data.choices[0].message.content
+          parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
         } catch {
-          parsed = { confidence: 50, authenticity: 50, accuracy: 50, suspicious: false, reason: 'Analysis completed' };
+          parsed = { confidence: 50, authenticity: 50, accuracy: 50, suspicious: false, reason: 'Analysis completed' }
         }
         results.push({
           questionNumber: q.questionNumber,
@@ -358,78 +359,113 @@ Respond ONLY with a raw JSON object:
           accuracy: Math.min(100, Math.max(0, Number(parsed.accuracy) || 50)),
           suspicious: Boolean(parsed.suspicious),
           reason: String(parsed.reason || 'Analysis completed')
-        });
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (error) {
+        })
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch {
         results.push({
           questionNumber: q.questionNumber, questionText: q.questiontext,
           userAnswer: q.userAnswer, score: q.score,
           confidence: 50, authenticity: 50, accuracy: 50,
           suspicious: false, reason: 'Analysis error'
-        });
+        })
       }
     }
-    localStorage.setItem(`interview_analysis_${sessionId}`, JSON.stringify(results));
-    return results;
-  };
+    localStorage.setItem(`interview_analysis_${sessionId}`, JSON.stringify(results))
+    return results
+  }
 
+  // ✅ handleFinish - waits for speech to complete before redirecting
   const handleFinish = async () => {
-    if (!sessionRef.current || isAnalyzing) return;
-    if (submitting) await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    setStopped(true);
-    stoppedRef.current = true;
-    ignoreFeedbackRef.current = true;
-    setIsAnalyzing(true);
-    window.speechSynthesis.cancel();
-    
-    botSay('Analyzing your answers... Please wait.');
-    
+    if (!sessionRef.current || isAnalyzing) return
+    if (submitting) await new Promise(resolve => setTimeout(resolve, 3000))
+
+    setStopped(true)
+    stoppedRef.current = true
+    ignoreFeedbackRef.current = true
+    setIsAnalyzing(true)
+
+    // Stop mic if running
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch (e) {}
+    }
+
+    // Clear speech queue and cancel current speech
+    speechQueueRef.current = []
+    isSpeakingRef.current = false
+    window.speechSynthesis.cancel()
+
+    // Wait for speech engine to fully stop
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    botSay('Analyzing your answers... Please wait.')
+
+    // Wait for "Analyzing..." message to finish speaking before doing heavy work
+    await new Promise(resolve => setTimeout(resolve, 3500))
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const res = await API.get(`/interview/${sessionRef.current.id}/questions`);
-      const allQuestions = res.data || [];
+      const res = await API.get(`/interview/${sessionRef.current.id}/questions`)
+      const allQuestions = res.data || []
       const answeredQuestionsList = allQuestions.filter(
         q => q.userAnswer && q.userAnswer.trim() !== '' &&
              q.questionNumber !== 999 && q.questionNumber !== '999'
-      );
+      )
+
       if (answeredQuestionsList.length === 0) {
-        botSay('No answers to analyze. Redirecting...');
-        setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2000);
-        setIsAnalyzing(false);
-        return;
+        // Clear queue and speak redirect message
+        speechQueueRef.current = []
+        isSpeakingRef.current = false
+        window.speechSynthesis.cancel()
+        await new Promise(resolve => setTimeout(resolve, 300))
+        botSay('No answers to analyze. Redirecting...')
+        await new Promise(resolve => setTimeout(resolve, 2500))
+        navigate(`/results/${sessionRef.current.id}`, { replace: true })
+        setIsAnalyzing(false)
+        return
       }
-      await analyzeAllAnswers(sessionRef.current.id, answeredQuestionsList);
-      botSay('Analysis complete! Redirecting to your results...');
-      setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2500);
-    } catch (err) {
-      botSay('Redirecting to your results...');
-      setTimeout(() => navigate(`/results/${sessionRef.current.id}`), 2000);
-      setIsAnalyzing(false);
+
+      await analyzeAllAnswers(sessionRef.current.id, answeredQuestionsList)
+
+      // Clear queue and speak final message, wait for it to finish
+      speechQueueRef.current = []
+      isSpeakingRef.current = false
+      window.speechSynthesis.cancel()
+      await new Promise(resolve => setTimeout(resolve, 300))
+      botSay('Analysis complete! Redirecting to your results...')
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      navigate(`/results/${sessionRef.current.id}`, { replace: true })
+
+    } catch {
+      speechQueueRef.current = []
+      isSpeakingRef.current = false
+      window.speechSynthesis.cancel()
+      await new Promise(resolve => setTimeout(resolve, 300))
+      botSay('Redirecting to your results...')
+      await new Promise(resolve => setTimeout(resolve, 2500))
+      navigate(`/results/${sessionRef.current.id}`, { replace: true })
+      setIsAnalyzing(false)
     }
-  };
+  }
 
   useEffect(() => {
     const t = setInterval(() => setSeconds((s) => s + 1), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // START SESSION WITH COMPLETED CHECK - FIXES INTERVIEW RESTART BUG
+  // START SESSION WITH COMPLETED CHECK
   useEffect(() => {
     const startSession = async () => {
       if (sessionStarted.current) return
-      sessionStarted.current = true  
-      
+      sessionStarted.current = true
+
       try {
         const urlParams = new URLSearchParams(window.location.search)
         const sessionId = urlParams.get('sessionId')
-        
+
         // Check if session already exists and is COMPLETED
         if (sessionId) {
           try {
             const sessionCheck = await API.get(`/interview/${sessionId}/status`)
             if (sessionCheck.data.status === 'COMPLETED' || sessionCheck.data.status === 'ABANDONED') {
-              // Session already completed - redirect to results without starting
               setLoading(false)
               navigate(`/results/${sessionId}`, { replace: true })
               return
@@ -438,7 +474,7 @@ Respond ONLY with a raw JSON object:
             console.error('Session status check failed:', checkErr)
           }
         }
-        
+
         let sessionData
 
         if (sessionId) {
@@ -463,12 +499,13 @@ Respond ONLY with a raw JSON object:
         }
 
         const welcomeMsg = `${getGreeting()} — welcome to your ${label} interview. I'll be asking you a series of technical questions. Please answer them clearly and in your own words.`
-        const warningMsg = `⚠️ Important: Please close all other tabs and applications before we begin. Do not use AI tools, search engines, or any external help during this interview. All activity is being monitored and any violation will be reported to the recruiter immediately.`
+        const warningMsg = `Important: Please close all other tabs and applications before we begin. Do not use AI tools, search engines, or any external help during this interview. All activity is being monitored.`
 
+        // ✅ Use speech queue for intro sequence — each message waits for previous to finish
         setTimeout(() => botSay(welcomeMsg), 300)
         setTimeout(() => botSay(warningMsg), 2000)
-        setTimeout(() => setShowCamera(true), 3500)
-        setTimeout(() => botSay(`${sessionData.questions[0]?.questiontext || ''}`), 6000)
+        setShowCamera(true)  // ✅ instant camera
+        setTimeout(() => botSay(sessionData.questions[0]?.questiontext || ''), 6000)
         setTimeout(() => setProctoringEnabled(true), 6000)
 
         const client = new Client({
@@ -497,6 +534,7 @@ Respond ONLY with a raw JSON object:
                   handleFinish()
                 }, 500)
               } else {
+                // ✅ 2 second gap before next question
                 const nextIndex = currentRef.current
                 const nextQ = questionsRef.current[nextIndex]
                 if (nextQ) {
@@ -504,7 +542,7 @@ Respond ONLY with a raw JSON object:
                     if (!pausedRef.current && !stoppedRef.current && !ignoreFeedbackRef.current) {
                       botSay(nextQ.questiontext)
                     }
-                  }, 600)
+                  }, 2000)
                 }
               }
               setSubmitting(false)
@@ -516,6 +554,8 @@ Respond ONLY with a raw JSON object:
               stoppedRef.current = true
               setPaused(true)
               setStopped(true)
+              speechQueueRef.current = []
+              isSpeakingRef.current = false
               window.speechSynthesis.cancel()
               botSay('The interviewer has ended the session. Analyzing your answers...')
               setTimeout(() => handleFinish(), 3000)
@@ -565,7 +605,7 @@ Respond ONLY with a raw JSON object:
                   if (nextQ) {
                     setTimeout(() => {
                       if (!pausedRef.current && !stoppedRef.current) botSay(nextQ.questiontext)
-                    }, 600)
+                    }, 2000) // ✅ 2 second gap after resume too
                   }
                 }, 1500)
               }
@@ -575,6 +615,8 @@ Respond ONLY with a raw JSON object:
               const data = JSON.parse(msg.body)
               if (data.action === 'WARN') {
                 setShowWarning(true)
+                speechQueueRef.current = []
+                isSpeakingRef.current = false
                 window.speechSynthesis.cancel()
                 setTimeout(() => setShowWarning(false), 10000)
               }
@@ -583,6 +625,8 @@ Respond ONLY with a raw JSON object:
                 setStopped(true)
                 stoppedRef.current = true
                 ignoreFeedbackRef.current = true
+                speechQueueRef.current = []
+                isSpeakingRef.current = false
                 window.speechSynthesis.cancel()
                 setShowTerminated(true)
               }
@@ -875,7 +919,6 @@ Respond ONLY with a raw JSON object:
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-dim)', padding: '4px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px' }}>{fmt(seconds)}</span>
-          {showCamera && <CameraStream sessionId={session?.id} userId={user?.id} />}
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>Q {current + 1}</span>
           <button
             onClick={handleFinish}
@@ -943,7 +986,10 @@ Respond ONLY with a raw JSON object:
         interviewActive={proctoringEnabled && !stopped && !paused && !isAnalyzing}
         stompClient={stompClient.current}
       />
-      
+
+      {/* ✅ CameraStream outside navbar - renders as fixed overlay */}
+      {showCamera && <CameraStream sessionId={session?.id} userId={user?.id} />}
+
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

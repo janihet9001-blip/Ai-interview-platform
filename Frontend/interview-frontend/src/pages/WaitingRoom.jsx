@@ -34,18 +34,13 @@ export default function WaitingRoom() {
         const sessions = response.data || []
         
         // Find the most recent session that is COMPLETED or ABANDONED
-        const completedSession = sessions.find(s => 
-          s.status === 'COMPLETED' || s.status === 'ABANDONED'
-        )
-        
-        if (completedSession) {
-          // User already completed an interview, redirect to results
-          setError('You have already completed an interview session.')
-          setTimeout(() => {
-            navigate(`/results/${completedSession.id}`, { replace: true })
-          }, 2000)
-          return
-        }
+const activeSession = sessions.find(s => s.status === 'IN_PROGRESS')
+
+if (activeSession) {
+  // Already in an interview, go there
+  navigate(`/interview/${activeSession.jobRole}?sessionId=${activeSession.id}`, { replace: true })
+  return
+}
       } catch (err) {
         console.error('Failed to check existing sessions:', err)
         // Continue to waiting room if check fails
@@ -58,15 +53,17 @@ export default function WaitingRoom() {
   }, [user, navigate])
 
   // Block back button - improved with better cleanup
-  useEffect(() => {
-    window.history.pushState(null, '', window.location.href)
-    const handlePopState = () => {
-      window.history.pushState(null, '', window.location.href)
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+useEffect(() => {
+  window.history.replaceState(null, '', '/waiting')
+  window.history.pushState(null, '', '/waiting')
 
+  const handlePopState = () => {
+    window.history.pushState(null, '', '/waiting')
+  }
+
+  window.addEventListener('popstate', handlePopState)
+  return () => window.removeEventListener('popstate', handlePopState)
+}, [])
   // WebSocket for session start - with reconnection and error handling
   useEffect(() => {
     if (!user?.id || checkingSession) return
@@ -86,7 +83,7 @@ export default function WaitingRoom() {
           try {
             const data = JSON.parse(msg.body)
             if (isSubscribed) {
-              navigate(`/interview/${data.jobRole}?sessionId=${data.id}`)
+navigate(`/interview/${data.jobRole}?sessionId=${data.id}`, { replace: true })
             }
           } catch (err) {
             console.error('Failed to parse session start message:', err)

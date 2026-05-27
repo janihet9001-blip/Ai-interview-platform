@@ -10,7 +10,6 @@ function getToken() {
 async function apiFetch(path, options = {}) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 30000)
-  
   try {
     const res = await fetch(`${API_URL}${path}`, {
       ...options,
@@ -19,25 +18,21 @@ async function apiFetch(path, options = {}) {
         Authorization: `Bearer ${getToken()}`,
         ...(options.headers || {}),
       },
-      signal: controller.signal
+      signal: controller.signal,
     })
-    
     clearTimeout(timeoutId)
-    
     if (res.status === 204) return null
     if (res.status === 401) {
       sessionStorage.removeItem('token')
       sessionStorage.removeItem('auth')
       window.location.href = '/login'
-      throw new Error('Session expired. Please login again.')
+      throw new Error('Session expired.')
     }
-    if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`)
+    if (!res.ok) throw new Error(`API error ${res.status}`)
     return res.json()
   } catch (err) {
     clearTimeout(timeoutId)
-    if (err.name === 'AbortError') {
-      throw new Error('Request timeout. Please try again.')
-    }
+    if (err.name === 'AbortError') throw new Error('Request timeout.')
     throw err
   }
 }
@@ -58,7 +53,7 @@ const statusInfo = (scorePct) => {
 const initials = (name = '') =>
   name.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('')
 
-const getAiRemark = (sessionId) => {
+const getAiRemarkFromStorage = (sessionId) => {
   try {
     const stored = localStorage.getItem(`interview_analysis_${sessionId}`)
     if (!stored) return null
@@ -79,12 +74,11 @@ const getAiRemark = (sessionId) => {
     if (au != null) parts.push(`${au}% authenticity`)
     if (suspicious > 0) parts.push(`${suspicious} suspicious response${suspicious > 1 ? 's' : ''}`)
     return parts.length ? parts.join(' · ') : null
-  } catch { 
-    return null 
+  } catch {
+    return null
   }
 }
 
-// PropTypes for component
 CandidatesTab.propTypes = {
   candidates: PropTypes.array.isRequired,
   sessions: PropTypes.array.isRequired,
@@ -94,7 +88,8 @@ CandidatesTab.propTypes = {
 export default function CandidatesTab({ candidates, sessions = [], loading = false }) {
   const [openId, setOpenId] = useState(null)
   const [dbRemarks, setDbRemarks] = useState({})
-  const [apiRemarks, setApiRemarks] = useState({})
+  const [sessionScores, setSessionScores] = useState({})
+  const [sessionRemarks, setSessionRemarks] = useState({})
   const [editingRemark, setEditingRemark] = useState(null)
   const [remarkDraft, setRemarkDraft] = useState('')
   const [scoreDraft, setScoreDraft] = useState('')
@@ -102,29 +97,17 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [savingId, setSavingId] = useState(null)
   const [error, setError] = useState(null)
-  const abortControllerRef = useRef(null)
+  const fetchedSessions = useRef(new Set())
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-    }
-  }, [])
-
-  // Load all recruiter remarks from DB on mount
+  // Load recruiter remarks from DB
   useEffect(() => {
     let isMounted = true
-    
-    const loadRemarks = async () => {
+    const load = async () => {
       try {
         const data = await apiFetch('/recruiter/remarks/all')
-        if (!isMounted) return
-        if (!data) return
-        
+        if (!isMounted || !data) return
         const map = {}
-        data.forEach((r) => {
+        data.forEach(r => {
           map[r.sessionId] = {
             recruiterScore: r.recruiterScore ?? null,
             remark: r.remark ?? '',
@@ -135,54 +118,82 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
         setError(null)
       } catch (err) {
         console.error('Failed to load remarks:', err)
-        if (isMounted) {
-          setError('Failed to load recruiter remarks. Please refresh.')
-        }
+        if (isMounted) setError('Failed to load recruiter remarks. Please refresh.')
       }
     }
-    
-    loadRemarks()
-    
-    return () => {
-      isMounted = false
-    }
+    load()
+    return () => { isMounted = false }
   }, [])
 
-  // Fetch AI remarks from API for completed sessions
+  // Fetch questions for each session — get real scores + single best feedback
   useEffect(() => {
-    sessions.forEach(s => {
-      if (s.totalQuestions > 0 && !apiRemarks[s.id]) {
-        apiFetch(`/interview/${s.id}/questions`)
-          .then(data => {
-            if (!data) return
-            const qs = data.filter(q => Number(q.questionNumber) !== 999 && q.aiFeedback)
-            if (!qs.length) return
-            const totalScore = qs.reduce((a, q) => a + (q.score || 0), 0)
-            const maxScore = qs.length * 10
-            const pct = Math.round((totalScore / maxScore) * 100)
-            const topFeedback = qs
-              .sort((a, b) => (b.score || 0) - (a.score || 0))
-              .slice(0, 2)
-              .map(q => `• ${q.aiFeedback}`)
-              .join('\n\n')
+    if (!sessions.length) return
 
-            setApiRemarks(prev => ({
+    sessions.forEach(s => {
+      if (fetchedSessions.current.has(s.id)) return
+      fetchedSessions.current.add(s.id)
+
+      apiFetch(`/interview/${s.id}/questions`)
+        .then(data => {
+          if (!data || !data.length) return
+
+          // Exclude recruiter questions
+          const realQs = data.filter(q => Number(q.questionNumber) !== 999)
+          const answeredQs = realQs.filter(q => q.userAnswer && q.userAnswer.trim() !== '')
+
+          if (!realQs.length) return
+
+          // Calculate real score
+          const totalScore = answeredQs.reduce((a, q) => a + (q.score || 0), 0)
+          const maxScore = answeredQs.length * 10
+          const pct = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : null
+
+          setSessionScores(prev => ({
+            ...prev,
+            [s.id]: {
+              pct,
+              totalScore,
+              answeredCount: answeredQs.length,
+              totalCount: realQs.length,
+            }
+          }))
+
+          // Build AI remark — ONLY one paragraph from the best answer
+          const feedbackQs = answeredQs
+            .filter(q => q.aiFeedback && q.aiFeedback.trim() !== '')
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
+
+          if (feedbackQs.length > 0) {
+            // Take only the single best feedback
+            const bestFeedback = feedbackQs[0].aiFeedback
+
+            const summary = pct != null
+              ? `Overall ${pct}% — ${answeredQs.length}/${realQs.length} questions answered.`
+              : `${answeredQs.length}/${realQs.length} questions answered.`
+
+            setSessionRemarks(prev => ({
               ...prev,
-              [s.id]: `Overall ${pct}% — ${qs.length} questions answered.\n\n${topFeedback}`
+              [s.id]: `${summary}\n\n${bestFeedback}`
             }))
-          })
-          .catch(() => {})
-      }
+          } else {
+            // No feedback available — just show summary
+            const summary = pct != null
+              ? `Overall ${pct}% — ${answeredQs.length}/${realQs.length} questions answered.`
+              : `${answeredQs.length}/${realQs.length} questions answered.`
+            setSessionRemarks(prev => ({ ...prev, [s.id]: summary }))
+          }
+        })
+        .catch(() => {})
     })
-  }, [sessions, apiRemarks])
+  }, [sessions])
 
   const saveRemark = useCallback(async (sessionId, text, score) => {
     const parsed = score !== '' ? parseInt(score) : null
-    const scoreToSave = !isNaN(parsed) && parsed != null && parsed >= 0 && parsed <= 100 ? parsed : null
+    const scoreToSave = (!isNaN(parsed) && parsed != null && parsed >= 0 && parsed <= 100) ? parsed : null
 
     setSavingId(sessionId)
     setError(null)
-    
+
     try {
       const saved = await apiFetch('/recruiter/remark', {
         method: 'POST',
@@ -193,8 +204,8 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
           status: statusInfo(scoreToSave).label,
         }),
       })
-      
-      setDbRemarks((prev) => ({
+
+      setDbRemarks(prev => ({
         ...prev,
         [sessionId]: {
           recruiterScore: saved.recruiterScore ?? null,
@@ -208,6 +219,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
     } finally {
       setSavingId(null)
     }
+
     setEditingRemark(null)
     setScoreDraft('')
   }, [])
@@ -215,12 +227,25 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
   const rows = useMemo(() => sessions.map(s => {
     const candidate = candidates.find(c => c.id === (s.userId || s.user?.id))
     const name = candidate?.fullName || s.userName || s.user?.fullName || s.user?.email || `User #${s.userId || s.user?.id}`
-    const aiScorePct = s.totalQuestions > 0
-      ? Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)
-      : null
-    const aiRemark = apiRemarks[s.id] || getAiRemark(s.id)
-    return { session: s, name, aiScorePct, aiRemark }
-  }), [sessions, candidates, apiRemarks])
+
+    const fetched = sessionScores[s.id]
+    let aiScorePct = null
+    let scoreDisplay = null
+
+    if (fetched) {
+      aiScorePct = fetched.pct
+      scoreDisplay = `${fetched.totalScore}/${fetched.answeredCount * 10}`
+    } else if (s.totalQuestions > 0) {
+      aiScorePct = Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)
+      scoreDisplay = `${s.totalScore}/${s.totalQuestions * 10}`
+    } else if (s.totalScore > 0) {
+      scoreDisplay = `${s.totalScore} pts`
+    }
+
+    const aiRemark = sessionRemarks[s.id] || getAiRemarkFromStorage(s.id)
+
+    return { session: s, name, aiScorePct, scoreDisplay, aiRemark }
+  }), [sessions, candidates, sessionScores, sessionRemarks])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -246,18 +271,6 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
     })
     return count
   }, [rows, dbRemarks])
-
-  const handleSearchChange = useCallback((e) => {
-    setSearch(e.target.value)
-  }, [])
-
-  const clearSearch = useCallback(() => {
-    setSearch('')
-  }, [])
-
-  const handleFilterChange = useCallback((status) => {
-    setFilterStatus(status)
-  }, [])
 
   const toggleExpand = useCallback((sessionId) => {
     setOpenId(prev => prev === sessionId ? null : sessionId)
@@ -297,49 +310,29 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Error Display */}
+
+      {/* Error */}
       {error && (
         <div style={{
-          background: '#EF444415',
-          border: '1px solid #EF444440',
-          borderRadius: 'var(--radius)',
-          padding: '12px 16px',
-          fontSize: '13px',
-          color: '#F87171',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          background: '#EF444415', border: '1px solid #EF444440',
+          borderRadius: 'var(--radius)', padding: '12px 16px',
+          fontSize: '13px', color: '#F87171',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <span>{error}</span>
-          <button
-            onClick={() => setError(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#F87171',
-              cursor: 'pointer',
-              fontSize: '16px',
-            }}
-          >
-            ×
-          </button>
+          <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', color: '#F87171', cursor: 'pointer', fontSize: '18px' }}>×</button>
         </div>
       )}
 
       {/* Search + Filter */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
-          <span style={{
-            position: 'absolute', left: '12px', top: '50%',
-            transform: 'translateY(-50%)', fontSize: '13px',
-            color: 'var(--text-dim)', pointerEvents: 'none',
-          }}>🔍</span>
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: 'var(--text-dim)', pointerEvents: 'none' }}>🔍</span>
           <input
             type="text"
             placeholder="Search by name, role or session ID..."
             value={search}
-            onChange={handleSearchChange}
-            aria-label="Search candidates"
+            onChange={e => setSearch(e.target.value)}
             style={{
               width: '100%', padding: '10px 34px 10px 34px',
               borderRadius: 'var(--radius)', border: '1px solid var(--border)',
@@ -351,16 +344,12 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
             onBlur={e => e.target.style.borderColor = 'var(--border)'}
           />
           {search && (
-            <button onClick={clearSearch} style={{
-              position: 'absolute', right: '10px', top: '50%',
-              transform: 'translateY(-50%)', background: 'none',
-              border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '13px',
-            }} aria-label="Clear search">✕</button>
+            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '13px' }}>✕</button>
           )}
         </div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {['ALL', 'SELECTED', 'ON HOLD', 'NOT SELECTED', 'PENDING'].map(s => (
-            <button key={s} onClick={() => handleFilterChange(s)} style={{
+            <button key={s} onClick={() => setFilterStatus(s)} style={{
               padding: '6px 14px', borderRadius: '20px', fontSize: '11px',
               fontFamily: 'var(--font-mono)', fontWeight: '600', cursor: 'pointer',
               border: `1px solid ${filterStatus === s ? '#2563EB' : 'var(--border)'}`,
@@ -376,8 +365,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
 
       {/* Table Header */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '2fr 1.2fr 200px 130px 60px',
+        display: 'grid', gridTemplateColumns: '2fr 1.2fr 200px 130px 60px',
         gap: '12px', padding: '8px 20px',
         fontSize: '10px', fontFamily: 'var(--font-mono)',
         color: 'var(--text-dim)', letterSpacing: '0.08em',
@@ -400,7 +388,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {filtered.map(({ session, name, aiScorePct, aiRemark }) => {
+          {filtered.map(({ session, name, aiScorePct, scoreDisplay, aiRemark }) => {
             const isOpen = openId === session.id
             const dbRemark = dbRemarks[session.id] || {}
             const recruiterRemark = dbRemark.remark || ''
@@ -416,21 +404,14 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                 overflow: 'hidden', transition: 'border-color 0.15s, background 0.15s',
               }}>
 
-                {/* Collapsed row */}
+                {/* Row */}
                 <div
                   onClick={() => toggleExpand(session.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      toggleExpand(session.id)
-                    }
-                  }}
                   role="button"
                   tabIndex={0}
-                  aria-expanded={isOpen}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(session.id) } }}
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '2fr 1.2fr 200px 130px 60px',
+                    display: 'grid', gridTemplateColumns: '2fr 1.2fr 200px 130px 60px',
                     gap: '12px', padding: '16px 20px',
                     alignItems: 'center', cursor: 'pointer',
                   }}
@@ -446,82 +427,65 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                       fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: 'white',
                     }}>{initials(name)}</div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{
-                        fontSize: '14px', fontWeight: '600', color: 'var(--text)',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>{name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                        Session #{session.id}
-                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>Session #{session.id}</div>
                     </div>
                   </div>
 
                   {/* Role */}
-                  <div style={{
-                    fontSize: '12px', fontFamily: 'var(--font-mono)',
-                    color: 'var(--text-dim)', whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>{session.jobRole?.replace(/_/g, ' ') || '—'}</div>
+                  <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {session.jobRole?.replace(/_/g, ' ') || '—'}
+                  </div>
 
-                  {/* AI Score + Recruiter Score side by side */}
-                  <div style={{
-                    display: 'grid', gridTemplateColumns: '1fr 1fr',
-                    gap: '4px', alignItems: 'center',
-                  }}>
+                  {/* Scores */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', alignItems: 'center' }}>
+
                     {/* AI Score */}
                     <div style={{
-                      textAlign: 'center',
-                      padding: '6px 4px',
-                      borderRadius: '8px',
-                      background: 'var(--surface2)',
-                      border: '1px solid var(--border)',
+                      textAlign: 'center', padding: '6px 4px', borderRadius: '8px',
+                      background: 'var(--surface2)', border: '1px solid var(--border)',
                     }}>
                       {aiScorePct !== null ? (
                         <>
-                          <div style={{
-                            fontSize: '18px', fontWeight: '800',
-                            fontFamily: 'var(--font-display)',
-                            color: pctColor(aiScorePct),
-                          }}>{aiScorePct}%</div>
-                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                            {session.totalScore}/{session.totalQuestions * 10}
+                          <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(aiScorePct) }}>
+                            {aiScorePct}%
                           </div>
+                          {scoreDisplay && (
+                            <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                              {scoreDisplay}
+                            </div>
+                          )}
+                        </>
+                      ) : scoreDisplay ? (
+                        <>
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-dim)', fontFamily: 'var(--font-display)' }}>{scoreDisplay}</div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>score</div>
                         </>
                       ) : (
-                        <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>—</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>—</span>
                       )}
                     </div>
 
                     {/* Recruiter Score */}
                     <div style={{
-                      textAlign: 'center',
-                      padding: '6px 4px',
-                      borderRadius: '8px',
+                      textAlign: 'center', padding: '6px 4px', borderRadius: '8px',
                       background: recruiterScore != null ? `${pctColor(recruiterScore)}10` : 'var(--surface2)',
                       border: `1px solid ${recruiterScore != null ? `${pctColor(recruiterScore)}40` : 'var(--border)'}`,
                     }}>
                       {recruiterScore != null ? (
                         <>
-                          <div style={{
-                            fontSize: '18px', fontWeight: '800',
-                            fontFamily: 'var(--font-display)',
-                            color: pctColor(recruiterScore),
-                          }}>{recruiterScore}%</div>
-                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                            recruiter
+                          <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(recruiterScore) }}>
+                            {recruiterScore}%
                           </div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>recruiter</div>
                         </>
                       ) : (
-                        <span style={{
-                          fontSize: '11px', color: 'var(--text-muted)',
-                          fontFamily: 'var(--font-mono)', display: 'block',
-                          padding: '4px 0',
-                        }}>+ score</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', display: 'block', padding: '4px 0' }}>+ score</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Status — recruiter score only */}
+                  {/* Status */}
                   <div style={{ textAlign: 'center' }}>
                     <span style={{
                       display: 'inline-block', padding: '4px 10px', borderRadius: '20px',
@@ -532,11 +496,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                   </div>
 
                   {/* Chevron */}
-                  <div style={{
-                    textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px',
-                    transition: 'transform 0.2s ease',
-                    transform: isOpen ? 'rotate(180deg)' : 'none',
-                  }} aria-hidden="true">▾</div>
+                  <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</div>
                 </div>
 
                 {/* Expanded */}
@@ -546,29 +506,43 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                     display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
                     animation: 'fadeIn 0.15s ease',
                   }}>
-                    {/* AI Remark */}
+
+                    {/* AI Remark — single paragraph */}
                     <div style={{
                       padding: '16px', borderRadius: 'var(--radius)',
                       background: '#1e293b', border: '1px solid #334155',
                       borderLeft: '3px solid #8B5CF6',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                        <span style={{ fontSize: '15px' }} aria-hidden="true">🤖</span>
-                        <span style={{
-                          fontSize: '10px', fontFamily: 'var(--font-mono)',
-                          color: '#A78BFA', letterSpacing: '0.08em',
-                          textTransform: 'uppercase', fontWeight: '600',
-                        }}>AI Remark</span>
+                        <span style={{ fontSize: '15px' }}>🤖</span>
+                        <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#A78BFA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>AI Remark</span>
                       </div>
-                      <p style={{
-                        fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7',
-                        fontStyle: aiRemark ? 'normal' : 'italic', whiteSpace: 'pre-line',
-                      }}>
-                        {aiRemark || 'No AI analysis available for this session.'}
-                      </p>
+                      {aiRemark ? (
+                        (() => {
+                          const lines = aiRemark.split('\n\n')
+                          const summary = lines[0]
+                          const feedback = lines[1] || null
+                          return (
+                            <>
+                              <p style={{ fontSize: '11px', color: '#94A3B8', margin: '0 0 10px', fontFamily: 'var(--font-mono)' }}>
+                                {summary}
+                              </p>
+                              {feedback && (
+                                <p style={{ fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7' }}>
+                                  {feedback}
+                                </p>
+                              )}
+                            </>
+                          )
+                        })()
+                      ) : (
+                        <p style={{ fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7', fontStyle: 'italic' }}>
+                          No AI analysis available for this session.
+                        </p>
+                      )}
                     </div>
 
-                    {/* Recruiter Remark + Score */}
+                    {/* Recruiter Remark */}
                     <div style={{
                       padding: '16px', borderRadius: 'var(--radius)',
                       background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -576,22 +550,13 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '15px' }} aria-hidden="true">✍️</span>
-                          <span style={{
-                            fontSize: '10px', fontFamily: 'var(--font-mono)',
-                            color: '#60A5FA', letterSpacing: '0.08em',
-                            textTransform: 'uppercase', fontWeight: '600',
-                          }}>Your Remark</span>
+                          <span style={{ fontSize: '15px' }}>✍️</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#60A5FA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>Your Remark</span>
                         </div>
                         {editingRemark !== session.id && (
                           <button
                             onClick={() => startEditing(session.id, recruiterRemark, recruiterScore)}
-                            style={{
-                              padding: '3px 10px', borderRadius: '6px', fontSize: '11px',
-                              fontFamily: 'var(--font-mono)', cursor: 'pointer',
-                              background: '#2563EB20', border: '1px solid #2563EB60',
-                              color: '#60A5FA', fontWeight: '600',
-                            }}
+                            style={{ padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontFamily: 'var(--font-mono)', cursor: 'pointer', background: '#2563EB20', border: '1px solid #2563EB60', color: '#60A5FA', fontWeight: '600' }}
                           >{recruiterRemark || recruiterScore != null ? 'Edit' : '+ Add'}</button>
                         )}
                       </div>
@@ -604,7 +569,6 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                             onChange={e => setRemarkDraft(e.target.value)}
                             placeholder="Write your remark about this candidate..."
                             rows={3}
-                            aria-label="Recruiter remark"
                             style={{
                               width: '100%', padding: '10px', borderRadius: '8px',
                               border: '1px solid #2563EB60', background: 'var(--surface)',
@@ -613,12 +577,10 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                               resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6',
                             }}
                           />
-                          {/* Score input */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <label style={{
-                              fontSize: '11px', fontFamily: 'var(--font-mono)',
-                              color: 'var(--text-dim)', whiteSpace: 'nowrap', flexShrink: 0,
-                            }}>Your Score</label>
+                            <label style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              Your Score
+                            </label>
                             <div style={{ position: 'relative', flex: 1 }}>
                               <input
                                 type="number"
@@ -627,11 +589,9 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                                 value={scoreDraft}
                                 onChange={e => {
                                   const v = e.target.value
-                                  if (v === '' || (Number(v) >= 0 && Number(v) <= 100))
-                                    setScoreDraft(v)
+                                  if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setScoreDraft(v)
                                 }}
                                 placeholder="0–100"
-                                aria-label="Recruiter score (0-100)"
                                 style={{
                                   width: '100%', padding: '7px 30px 7px 10px',
                                   borderRadius: '8px', border: '1px solid #2563EB60',
@@ -640,20 +600,12 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                                   outline: 'none', boxSizing: 'border-box',
                                 }}
                               />
-                              <span style={{
-                                position: 'absolute', right: '8px', top: '50%',
-                                transform: 'translateY(-50%)',
-                                fontSize: '11px', color: 'var(--text-dim)',
-                                fontFamily: 'var(--font-mono)', pointerEvents: 'none',
-                              }} aria-hidden="true">%</span>
+                              <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', pointerEvents: 'none' }}>%</span>
                             </div>
                             {scoreDraft !== '' && (
-                              <span style={{
-                                fontSize: '16px', fontWeight: '800',
-                                fontFamily: 'var(--font-display)',
-                                color: pctColor(Number(scoreDraft)),
-                                minWidth: '44px', textAlign: 'center', flexShrink: 0,
-                              }} aria-hidden="true">{scoreDraft}%</span>
+                              <span style={{ fontSize: '16px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(Number(scoreDraft)), minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>
+                                {scoreDraft}%
+                              </span>
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -678,14 +630,8 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                               border: `1px solid ${pctColor(recruiterScore)}30`,
                               width: 'fit-content',
                             }}>
-                              <span style={{
-                                fontSize: '20px', fontWeight: '800',
-                                fontFamily: 'var(--font-display)',
-                                color: pctColor(recruiterScore),
-                              }}>{recruiterScore}%</span>
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                                your score
-                              </span>
+                              <span style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(recruiterScore) }}>{recruiterScore}%</span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>your score</span>
                             </div>
                           )}
                           <p style={{
@@ -706,15 +652,10 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
           })}
         </div>
       )}
-      
+
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-5px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   )

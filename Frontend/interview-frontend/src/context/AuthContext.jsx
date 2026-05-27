@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
     if (userData.role === 'ADMIN') {
       navigate('/recruiter')
     } else {
-      navigate('/waiting')
+ navigate('/waiting', { replace: true })
     }
   }
 

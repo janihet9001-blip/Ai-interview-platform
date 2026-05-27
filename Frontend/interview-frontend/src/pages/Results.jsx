@@ -160,106 +160,7 @@ const STYLES = `
     text-shadow: 0 0 80px rgba(79, 140, 255, 0.25);
   }
 
-  /* ── Score card ── */
-  .rs-score-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-card); padding: 2.2rem 2.4rem;
-    margin-bottom: 2rem;
-    display: flex; align-items: center; gap: 2.5rem; flex-wrap: wrap;
-    backdrop-filter: blur(24px);
-    box-shadow:
-      0 0 0 1px var(--blue-faint),
-      0 1px 0 rgba(79, 140, 255, 0.12) inset,
-      0 20px 60px rgba(0, 0, 0, 0.6);
-    position: relative; overflow: hidden;
-    animation: rsFadeUp 0.75s cubic-bezier(0.16,1,0.3,1) 0.1s both;
-  }
-  .rs-score-card::before {
-    content: '';
-    position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(79, 140, 255, 0.55), transparent);
-  }
-  .rs-score-glow {
-    position: absolute; top: -40px; left: -40px;
-    width: 200px; height: 200px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(30, 70, 220, 0.14), transparent 70%);
-    pointer-events: none;
-  }
-  .rs-score-circle {
-    display: flex; flex-direction: column; align-items: center;
-    min-width: 130px; position: relative; z-index: 1;
-  }
-  .rs-score-ring {
-    width: 110px; height: 110px; border-radius: 50%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    position: relative;
-    background: rgba(255,255,255,0.02);
-    border: 2px solid var(--border-subtle);
-    box-shadow: 0 0 30px var(--blue-faint), inset 0 0 20px rgba(0,0,0,0.3);
-  }
-  .rs-score-ring::before {
-    content: '';
-    position: absolute; inset: -4px; border-radius: 50%;
-    background: conic-gradient(var(--score-color) var(--score-pct), rgba(255,255,255,0.05) 0);
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black calc(100% - 3px));
-    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black calc(100% - 3px));
-    animation: rsRingIn 1.2s cubic-bezier(0.16,1,0.3,1) 0.3s both;
-  }
-  @keyframes rsRingIn {
-    from { opacity: 0; transform: rotate(-90deg) scale(0.8); }
-    to   { opacity: 1; transform: rotate(0deg) scale(1); }
-  }
-  .rs-score-num {
-    font-family: 'Bricolage Grotesque', sans-serif;
-    font-size: 2rem; font-weight: 800; line-height: 1;
-    color: var(--score-color);
-    text-shadow: 0 0 20px var(--score-color);
-    animation: rsCountUp 1s cubic-bezier(0.16,1,0.3,1) 0.4s both;
-  }
-  @keyframes rsCountUp {
-    from { opacity: 0; transform: scale(0.7); }
-    to   { opacity: 1; transform: scale(1); }
-  }
-  .rs-score-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px; color: var(--text-muted);
-    letter-spacing: 1px; margin-top: 3px; text-transform: uppercase;
-  }
-.rs-score-info { flex: 1; position: relative; z-index: 1; display: flex; align-items: center; }
-  .rs-grade-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 16px; border-radius: var(--radius-badge);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; font-weight: 700; letter-spacing: 1px;
-    text-transform: uppercase; color: #fff; margin-bottom: 0;
-    background: var(--score-color);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 20px var(--score-color-faint);
-    animation: rsFadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.5s both;
-  }
-  .rs-grade-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: rgba(255,255,255,0.7);
-    animation: rsGradeDot 2s ease-in-out infinite;
-  }
-  @keyframes rsGradeDot {
-    0%,100% { opacity: 1; } 50% { opacity: 0.3; }
-  }
-  .rs-score-stats {
-    display: flex; gap: 1.5rem; flex-wrap: wrap;
-  }
-  .rs-stat-item {
-    display: flex; flex-direction: column; gap: 2px;
-  }
-  .rs-stat-val {
-    font-family: 'Bricolage Grotesque', sans-serif;
-    font-size: 1.3rem; font-weight: 700; color: var(--text-primary);
-  }
-  .rs-stat-lbl {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px; color: var(--text-muted);
-    letter-spacing: 1px; text-transform: uppercase;
-  }
+  /* ── Score card ── REMOVED - styles kept but not used ── */
 
   /* ── Retrying notice ── */
   .rs-retrying {
@@ -373,7 +274,6 @@ const STYLES = `
 
   @media (max-width: 600px) {
     .rs-inner { padding: 2rem 1rem 4rem; }
-    .rs-score-card { padding: 1.5rem; gap: 1.5rem; }
     .rs-qcard-header { padding: 14px 16px 0; }
     .rs-qtext { padding: 10px 16px 14px; }
     .rs-section { padding: 12px 16px; }
@@ -393,6 +293,18 @@ export default function Results() {
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState(null);
   const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    window.history.replaceState(null, '', window.location.href)
+    window.history.pushState(null, '', window.location.href)
+
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -417,7 +329,6 @@ export default function Results() {
     };
   }, []);
 
-  // Fetch results with cleanup
   const fetchResults = useCallback(async (attempt = 1) => {
     if (!sessionId) {
       setError('No session ID provided');
@@ -428,6 +339,13 @@ export default function Results() {
     try {
       const res = await API.get(`/interview/${sessionId}/questions`);
       const data = res.data || [];
+
+      if (data.length === 0 && attempt === 1) {
+        setError('No results found for this session.');
+        setLoading(false);
+        return;
+      }
+
       setAllQuestions(data);
       setLoading(false);
       setError(null);
@@ -462,11 +380,6 @@ export default function Results() {
     q => q.userAnswer && q.userAnswer.trim() !== ""
   );
   
-  const aiAnswered = answeredQuestions.filter(q => Number(q.questionNumber) !== 999);
-  const totalScore = aiAnswered.reduce((sum, q) => sum + (q.score || 0), 0);
-  const maxScore = aiAnswered.length * 10;
-  const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-
   const getScoreColor = useCallback((score) => {
     if (!score && score !== 0) return { color: '#64748b', glow: 'rgba(100,116,139,0.3)' };
     if (score >= 8) return { color: 'var(--score-excellent)', glow: 'rgba(34,197,94,0.3)' };
@@ -474,15 +387,6 @@ export default function Results() {
     if (score >= 3) return { color: 'var(--score-average)', glow: 'rgba(245,158,11,0.3)' };
     return { color: 'var(--score-poor)', glow: 'rgba(239,68,68,0.3)' };
   }, []);
-
-  const getGrade = useCallback((pct) => {
-    if (pct >= 80) return { grade: 'Excellent', color: 'var(--score-excellent)', faint: 'rgba(34,197,94,0.25)' };
-    if (pct >= 60) return { grade: 'Good', color: 'var(--blue-400)', faint: 'var(--blue-glow)' };
-    if (pct >= 40) return { grade: 'Average', color: 'var(--score-average)', faint: 'rgba(245,158,11,0.25)' };
-    return { grade: 'Needs Practice', color: 'var(--score-poor)', faint: 'rgba(239,68,68,0.25)' };
-  }, []);
-
-  const { grade, color: gradeColor, faint: gradeFaint } = getGrade(percentage);
 
   // Error state
   if (error) {
@@ -581,31 +485,7 @@ export default function Results() {
           <h1 className="rs-title">Interview Results</h1>
         </div>
 
-        {/* Score Summary Card */}
-        <div className="rs-score-card">
-          <div className="rs-score-circle">
-            <div className="rs-score-ring" style={{ '--score-color': gradeColor, '--score-pct': `${percentage}%` }}>
-              <div className="rs-score-num">{percentage}%</div>
-              <div className="rs-score-sub">Overall Score</div>
-            </div>
-          </div>
-          <div className="rs-score-info">
-            <div className="rs-grade-badge" style={{ '--score-color': gradeColor, '--score-color-faint': gradeFaint }}>
-              <span className="rs-grade-dot" />
-              {grade}
-            </div>
-            <div className="rs-score-stats" style={{ marginLeft: 'auto' }}>
-              <div className="rs-stat-item">
-                <div className="rs-stat-val">{answeredQuestions.length}</div>
-                <div className="rs-stat-lbl">Questions</div>
-              </div>
-              <div className="rs-stat-item">
-                <div className="rs-stat-val">{totalScore}/{maxScore}</div>
-                <div className="rs-stat-lbl">Points</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Score Summary Card - REMOVED */}
 
         {/* Retrying notice */}
         {retrying && (

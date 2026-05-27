@@ -73,14 +73,14 @@ export default function ResumeScreeningTab({
     conversationRef.current = []
     setResumeLoading(true)
     
-    const token = sessionStorage.getItem('token')
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    
-    fetch(`${import.meta.env.VITE_API_URL}/users/${selectedCandidate.id}/resume`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal
-    })
+const token = sessionStorage.getItem('token')
+const controller = new AbortController()
+abortControllerRef.current = controller
+
+fetch(`/api/users/${selectedCandidate.id}/resume`, {
+  headers: { Authorization: `Bearer ${token}` },
+  signal: controller.signal
+})
       .then(res => {
         if (res.status === 404) {
           setNoResume(true)

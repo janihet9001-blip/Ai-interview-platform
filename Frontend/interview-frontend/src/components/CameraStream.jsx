@@ -7,7 +7,8 @@ import PropTypes from 'prop-types'
 export default function CameraStream({ sessionId, userId }) {
   const peerRef = useRef(null)
   const stompRef = useRef(null)
-  const streamRef = useRef(null) // ✅ Added to track media stream
+  const streamRef = useRef(null) 
+    const cameraStartedRef = useRef(false) // ✅ Added to track media stream
   const [showBanner, setShowBanner] = useState(false)
   const [cameraStarted, setCameraStarted] = useState(false)
   const [error, setError] = useState(null)
@@ -31,6 +32,7 @@ export default function CameraStream({ sessionId, userId }) {
       })
       
       streamRef.current = stream
+            cameraStartedRef.current = true
       setCameraStarted(true)
       setShowBanner(false)
       
@@ -135,29 +137,25 @@ export default function CameraStream({ sessionId, userId }) {
     stompRef.current = stomp
 
     // Show banner after 5 seconds (after warning message)
-    const bannerTimeout = setTimeout(() => {
-      if (!cameraStarted) {
-        setShowBanner(true)
-      }
-    }, 5000)
+const bannerTimeout = setTimeout(() => {
+  if (!cameraStartedRef.current) {
+    setShowBanner(true)
+  }
+}, 0)
 
     return () => {
       clearTimeout(bannerTimeout)
       if (stompRef.current) {
         try {
           stompRef.current.deactivate()
-        } catch (e) {
-          // Ignore
-        }
+        } catch (e) {}
         stompRef.current = null
       }
     }
-  }, [sessionId, userId, cameraStarted])
+  }, [sessionId, userId])  // ← cameraStarted removed
 
-  // If camera is already started, don't show anything
+  // These two lines stay the same:
   if (cameraStarted) return null
-  
-  // If error occurred but still showing banner
   if (!showBanner && !error) return null
 
   return (
