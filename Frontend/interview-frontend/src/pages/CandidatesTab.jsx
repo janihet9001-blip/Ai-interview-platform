@@ -9,7 +9,7 @@ function getToken() {
 
 async function apiFetch(path, options = {}) {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 30000)
   
   try {
     const res = await fetch(`${API_URL}${path}`, {
@@ -26,7 +26,6 @@ async function apiFetch(path, options = {}) {
     
     if (res.status === 204) return null
     if (res.status === 401) {
-      // Unauthorized - clear session and redirect
       sessionStorage.removeItem('token')
       sessionStorage.removeItem('auth')
       window.location.href = '/login'
@@ -59,8 +58,6 @@ const statusInfo = (scorePct) => {
 const initials = (name = '') =>
   name.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('')
 
-<<<<<<< HEAD
-=======
 const getAiRemark = (sessionId) => {
   try {
     const stored = localStorage.getItem(`interview_analysis_${sessionId}`)
@@ -94,11 +91,10 @@ CandidatesTab.propTypes = {
   loading: PropTypes.bool,
 }
 
->>>>>>> dd4a1be (Updated project)
 export default function CandidatesTab({ candidates, sessions = [], loading = false }) {
   const [openId, setOpenId] = useState(null)
   const [dbRemarks, setDbRemarks] = useState({})
-  const [apiRemarks, setApiRemarks] = useState({})  // ← NEW
+  const [apiRemarks, setApiRemarks] = useState({})
   const [editingRemark, setEditingRemark] = useState(null)
   const [remarkDraft, setRemarkDraft] = useState('')
   const [scoreDraft, setScoreDraft] = useState('')
@@ -152,8 +148,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
     }
   }, [])
 
-<<<<<<< HEAD
-  // ← NEW: Fetch AI remarks from API for completed sessions
+  // Fetch AI remarks from API for completed sessions
   useEffect(() => {
     sessions.forEach(s => {
       if (s.totalQuestions > 0 && !apiRemarks[s.id]) {
@@ -165,26 +160,23 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
             const totalScore = qs.reduce((a, q) => a + (q.score || 0), 0)
             const maxScore = qs.length * 10
             const pct = Math.round((totalScore / maxScore) * 100)
-const topFeedback = qs
-  .sort((a, b) => (b.score || 0) - (a.score || 0))
-  .slice(0, 2)
-  .map(q => `• ${q.aiFeedback}`)
-  .join('\n\n')
+            const topFeedback = qs
+              .sort((a, b) => (b.score || 0) - (a.score || 0))
+              .slice(0, 2)
+              .map(q => `• ${q.aiFeedback}`)
+              .join('\n\n')
 
-setApiRemarks(prev => ({
-  ...prev,
-  [s.id]: `Overall ${pct}% — ${qs.length} questions answered.\n\n${topFeedback}`
-}))
+            setApiRemarks(prev => ({
+              ...prev,
+              [s.id]: `Overall ${pct}% — ${qs.length} questions answered.\n\n${topFeedback}`
+            }))
           })
           .catch(() => {})
       }
     })
-  }, [sessions])
+  }, [sessions, apiRemarks])
 
-  const saveRemark = async (sessionId, text, score) => {
-=======
   const saveRemark = useCallback(async (sessionId, text, score) => {
->>>>>>> dd4a1be (Updated project)
     const parsed = score !== '' ? parseInt(score) : null
     const scoreToSave = !isNaN(parsed) && parsed != null && parsed >= 0 && parsed <= 100 ? parsed : null
 
@@ -226,9 +218,9 @@ setApiRemarks(prev => ({
     const aiScorePct = s.totalQuestions > 0
       ? Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)
       : null
-    const aiRemark = apiRemarks[s.id] || null  // ← CHANGED
+    const aiRemark = apiRemarks[s.id] || getAiRemark(s.id)
     return { session: s, name, aiScorePct, aiRemark }
-  }), [sessions, candidates, apiRemarks])  // ← added apiRemarks dependency
+  }), [sessions, candidates, apiRemarks])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -334,21 +326,9 @@ setApiRemarks(prev => ({
         </div>
       )}
 
+      {/* Search + Filter */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
-<<<<<<< HEAD
-          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: 'var(--text-dim)', pointerEvents: 'none' }}>🔍</span>
-          <input type="text" placeholder="Search by name, role or session ID..." value={search} onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '10px 34px 10px 34px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
-            onFocus={e => e.target.style.borderColor = '#2563EB'}
-            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-          />
-          {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '13px' }}>✕</button>}
-        </div>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {['ALL', 'SELECTED', 'ON HOLD', 'NOT SELECTED', 'PENDING'].map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '600', cursor: 'pointer', border: `1px solid ${filterStatus === s ? '#2563EB' : 'var(--border)'}`, background: filterStatus === s ? '#2563EB20' : 'var(--surface2)', color: filterStatus === s ? '#60A5FA' : 'var(--text-dim)', transition: 'all 0.15s' }}>
-=======
           <span style={{
             position: 'absolute', left: '12px', top: '50%',
             transform: 'translateY(-50%)', fontSize: '13px',
@@ -388,14 +368,21 @@ setApiRemarks(prev => ({
               color: filterStatus === s ? '#60A5FA' : 'var(--text-dim)',
               transition: 'all 0.15s',
             }}>
->>>>>>> dd4a1be (Updated project)
               {s} <span style={{ opacity: 0.6 }}>({statusCounts[s] || 0})</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 200px 130px 60px', gap: '12px', padding: '8px 20px', fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>
+      {/* Table Header */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '2fr 1.2fr 200px 130px 60px',
+        gap: '12px', padding: '8px 20px',
+        fontSize: '10px', fontFamily: 'var(--font-mono)',
+        color: 'var(--text-dim)', letterSpacing: '0.08em',
+        textTransform: 'uppercase', borderBottom: '1px solid var(--border)',
+      }}>
         <span>Candidate</span>
         <span>Role</span>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', textAlign: 'center' }}>
@@ -406,8 +393,11 @@ setApiRemarks(prev => ({
         <span />
       </div>
 
+      {/* Rows */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>No candidates match your filter.</div>
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+          No candidates match your filter.
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filtered.map(({ session, name, aiScorePct, aiRemark }) => {
@@ -419,12 +409,13 @@ setApiRemarks(prev => ({
             const isSaving = savingId === session.id
 
             return (
-              <div key={session.id} style={{ border: `1px solid ${isOpen ? '#2563EB60' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', background: isOpen ? '#2563EB08' : 'var(--surface)', overflow: 'hidden', transition: 'border-color 0.15s, background 0.15s' }}>
+              <div key={session.id} style={{
+                border: `1px solid ${isOpen ? '#2563EB60' : 'var(--border)'}`,
+                borderRadius: 'var(--radius-lg)',
+                background: isOpen ? '#2563EB08' : 'var(--surface)',
+                overflow: 'hidden', transition: 'border-color 0.15s, background 0.15s',
+              }}>
 
-<<<<<<< HEAD
-                <div onClick={() => setOpenId(isOpen ? null : session.id)}
-                  style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 200px 130px 60px', gap: '12px', padding: '16px 20px', alignItems: 'center', cursor: 'pointer' }}
-=======
                 {/* Collapsed row */}
                 <div
                   onClick={() => toggleExpand(session.id)}
@@ -443,93 +434,148 @@ setApiRemarks(prev => ({
                     gap: '12px', padding: '16px 20px',
                     alignItems: 'center', cursor: 'pointer',
                   }}
->>>>>>> dd4a1be (Updated project)
                   onMouseEnter={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'var(--surface2)' }}
                   onMouseLeave={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'var(--surface)' }}
                 >
+                  {/* Candidate */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                    <div style={{ width: '38px', height: '38px', borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #2563EB, #06B6D4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: 'white' }}>{initials(name)}</div>
+                    <div style={{
+                      width: '38px', height: '38px', borderRadius: '50%', flexShrink: 0,
+                      background: 'linear-gradient(135deg, #2563EB, #06B6D4)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: 'white',
+                    }}>{initials(name)}</div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>Session #{session.id}</div>
+                      <div style={{
+                        fontSize: '14px', fontWeight: '600', color: 'var(--text)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>{name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        Session #{session.id}
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.jobRole?.replace(/_/g, ' ') || '—'}</div>
+                  {/* Role */}
+                  <div style={{
+                    fontSize: '12px', fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-dim)', whiteSpace: 'nowrap',
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>{session.jobRole?.replace(/_/g, ' ') || '—'}</div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', alignItems: 'center' }}>
-                    <div style={{ textAlign: 'center', padding: '6px 4px', borderRadius: '8px', background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                  {/* AI Score + Recruiter Score side by side */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr',
+                    gap: '4px', alignItems: 'center',
+                  }}>
+                    {/* AI Score */}
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '6px 4px',
+                      borderRadius: '8px',
+                      background: 'var(--surface2)',
+                      border: '1px solid var(--border)',
+                    }}>
                       {aiScorePct !== null ? (
                         <>
-                          <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(aiScorePct) }}>{aiScorePct}%</div>
-                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{session.totalScore}/{session.totalQuestions * 10}</div>
+                          <div style={{
+                            fontSize: '18px', fontWeight: '800',
+                            fontFamily: 'var(--font-display)',
+                            color: pctColor(aiScorePct),
+                          }}>{aiScorePct}%</div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                            {session.totalScore}/{session.totalQuestions * 10}
+                          </div>
                         </>
                       ) : (
                         <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>—</span>
                       )}
                     </div>
-                    <div style={{ textAlign: 'center', padding: '6px 4px', borderRadius: '8px', background: recruiterScore != null ? `${pctColor(recruiterScore)}10` : 'var(--surface2)', border: `1px solid ${recruiterScore != null ? `${pctColor(recruiterScore)}40` : 'var(--border)'}` }}>
+
+                    {/* Recruiter Score */}
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '6px 4px',
+                      borderRadius: '8px',
+                      background: recruiterScore != null ? `${pctColor(recruiterScore)}10` : 'var(--surface2)',
+                      border: `1px solid ${recruiterScore != null ? `${pctColor(recruiterScore)}40` : 'var(--border)'}`,
+                    }}>
                       {recruiterScore != null ? (
                         <>
-                          <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(recruiterScore) }}>{recruiterScore}%</div>
-                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>recruiter</div>
+                          <div style={{
+                            fontSize: '18px', fontWeight: '800',
+                            fontFamily: 'var(--font-display)',
+                            color: pctColor(recruiterScore),
+                          }}>{recruiterScore}%</div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                            recruiter
+                          </div>
                         </>
                       ) : (
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', display: 'block', padding: '4px 0' }}>+ score</span>
+                        <span style={{
+                          fontSize: '11px', color: 'var(--text-muted)',
+                          fontFamily: 'var(--font-mono)', display: 'block',
+                          padding: '4px 0',
+                        }}>+ score</span>
                       )}
                     </div>
                   </div>
 
+                  {/* Status — recruiter score only */}
                   <div style={{ textAlign: 'center' }}>
-                    <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', fontFamily: 'var(--font-mono)', background: status.bg, color: status.color, border: `1px solid ${status.border}`, letterSpacing: '0.05em' }}>{status.label}</span>
+                    <span style={{
+                      display: 'inline-block', padding: '4px 10px', borderRadius: '20px',
+                      fontSize: '10px', fontWeight: '700', fontFamily: 'var(--font-mono)',
+                      background: status.bg, color: status.color,
+                      border: `1px solid ${status.border}`, letterSpacing: '0.05em',
+                    }}>{status.label}</span>
                   </div>
 
-<<<<<<< HEAD
-                  <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</div>
-=======
                   {/* Chevron */}
                   <div style={{
                     textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px',
                     transition: 'transform 0.2s ease',
                     transform: isOpen ? 'rotate(180deg)' : 'none',
                   }} aria-hidden="true">▾</div>
->>>>>>> dd4a1be (Updated project)
                 </div>
 
+                {/* Expanded */}
                 {isOpen && (
-                  <div style={{ borderTop: '1px solid var(--border)', padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', animation: 'fadeIn 0.15s ease' }}>
-                    <div style={{ padding: '16px', borderRadius: 'var(--radius)', background: '#1e293b', border: '1px solid #334155', borderLeft: '3px solid #8B5CF6' }}>
+                  <div style={{
+                    borderTop: '1px solid var(--border)', padding: '20px',
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
+                    animation: 'fadeIn 0.15s ease',
+                  }}>
+                    {/* AI Remark */}
+                    <div style={{
+                      padding: '16px', borderRadius: 'var(--radius)',
+                      background: '#1e293b', border: '1px solid #334155',
+                      borderLeft: '3px solid #8B5CF6',
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-<<<<<<< HEAD
-                        <span style={{ fontSize: '15px' }}>🤖</span>
-                        <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#A78BFA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>AI Remark</span>
-=======
                         <span style={{ fontSize: '15px' }} aria-hidden="true">🤖</span>
                         <span style={{
                           fontSize: '10px', fontFamily: 'var(--font-mono)',
                           color: '#A78BFA', letterSpacing: '0.08em',
                           textTransform: 'uppercase', fontWeight: '600',
                         }}>AI Remark</span>
->>>>>>> dd4a1be (Updated project)
                       </div>
-<p style={{ fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7', fontStyle: aiRemark ? 'normal' : 'italic', whiteSpace: 'pre-line' }}>
-  {aiRemark || 'No AI analysis available for this session.'}
-</p>
+                      <p style={{
+                        fontSize: '13px', color: '#CBD5E1', margin: 0, lineHeight: '1.7',
+                        fontStyle: aiRemark ? 'normal' : 'italic', whiteSpace: 'pre-line',
+                      }}>
+                        {aiRemark || 'No AI analysis available for this session.'}
+                      </p>
                     </div>
 
-                    <div style={{ padding: '16px', borderRadius: 'var(--radius)', background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: '3px solid #2563EB' }}>
+                    {/* Recruiter Remark + Score */}
+                    <div style={{
+                      padding: '16px', borderRadius: 'var(--radius)',
+                      background: 'var(--surface2)', border: '1px solid var(--border)',
+                      borderLeft: '3px solid #2563EB',
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-<<<<<<< HEAD
-                          <span style={{ fontSize: '15px' }}>✍️</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#60A5FA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>Your Remark</span>
-                        </div>
-                        {editingRemark !== session.id && (
-                          <button onClick={e => { e.stopPropagation(); setEditingRemark(session.id); setRemarkDraft(recruiterRemark); setScoreDraft(recruiterScore != null ? String(recruiterScore) : '') }}
-                            style={{ padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontFamily: 'var(--font-mono)', cursor: 'pointer', background: '#2563EB20', border: '1px solid #2563EB60', color: '#60A5FA', fontWeight: '600' }}>
-                            {recruiterRemark || recruiterScore != null ? 'Edit' : '+ Add'}
-                          </button>
-=======
                           <span style={{ fontSize: '15px' }} aria-hidden="true">✍️</span>
                           <span style={{
                             fontSize: '10px', fontFamily: 'var(--font-mono)',
@@ -547,16 +593,11 @@ setApiRemarks(prev => ({
                               color: '#60A5FA', fontWeight: '600',
                             }}
                           >{recruiterRemark || recruiterScore != null ? 'Edit' : '+ Add'}</button>
->>>>>>> dd4a1be (Updated project)
                         )}
                       </div>
 
                       {editingRemark === session.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-<<<<<<< HEAD
-                          <textarea autoFocus value={remarkDraft} onChange={e => setRemarkDraft(e.target.value)} placeholder="Write your remark about this candidate..." rows={3}
-                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #2563EB60', background: 'var(--surface)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-body)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6' }} />
-=======
                           <textarea
                             autoFocus
                             value={remarkDraft}
@@ -573,22 +614,12 @@ setApiRemarks(prev => ({
                             }}
                           />
                           {/* Score input */}
->>>>>>> dd4a1be (Updated project)
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <label style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>Your Score</label>
+                            <label style={{
+                              fontSize: '11px', fontFamily: 'var(--font-mono)',
+                              color: 'var(--text-dim)', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>Your Score</label>
                             <div style={{ position: 'relative', flex: 1 }}>
-<<<<<<< HEAD
-                              <input type="number" min="0" max="100" value={scoreDraft} onChange={e => { const v = e.target.value; if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setScoreDraft(v) }} placeholder="0–100"
-                                style={{ width: '100%', padding: '7px 30px 7px 10px', borderRadius: '8px', border: '1px solid #2563EB60', background: 'var(--surface)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none', boxSizing: 'border-box' }}
-                                onClick={e => e.stopPropagation()} />
-                              <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', pointerEvents: 'none' }}>%</span>
-                            </div>
-                            {scoreDraft !== '' && <span style={{ fontSize: '16px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(Number(scoreDraft)), minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>{scoreDraft}%</span>}
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                            <button onClick={e => { e.stopPropagation(); setEditingRemark(null); setScoreDraft('') }} style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>Cancel</button>
-                            <button disabled={isSaving} onClick={e => { e.stopPropagation(); saveRemark(session.id, remarkDraft, scoreDraft) }} style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'var(--surface3)' : '#2563EB', border: 'none', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}>{isSaving ? 'Saving…' : 'Save'}</button>
-=======
                               <input
                                 type="number"
                                 min="0"
@@ -635,18 +666,34 @@ setApiRemarks(prev => ({
                               onClick={() => saveRemark(session.id, remarkDraft, scoreDraft)}
                               style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'var(--surface3)' : '#2563EB', border: 'none', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}
                             >{isSaving ? 'Saving…' : 'Save'}</button>
->>>>>>> dd4a1be (Updated project)
                           </div>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {recruiterScore != null && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '8px', background: `${pctColor(recruiterScore)}12`, border: `1px solid ${pctColor(recruiterScore)}30`, width: 'fit-content' }}>
-                              <span style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'var(--font-display)', color: pctColor(recruiterScore) }}>{recruiterScore}%</span>
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>your score</span>
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: '8px',
+                              padding: '6px 10px', borderRadius: '8px',
+                              background: `${pctColor(recruiterScore)}12`,
+                              border: `1px solid ${pctColor(recruiterScore)}30`,
+                              width: 'fit-content',
+                            }}>
+                              <span style={{
+                                fontSize: '20px', fontWeight: '800',
+                                fontFamily: 'var(--font-display)',
+                                color: pctColor(recruiterScore),
+                              }}>{recruiterScore}%</span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                                your score
+                              </span>
                             </div>
                           )}
-                          <p style={{ fontSize: '13px', color: recruiterRemark ? 'var(--text)' : 'var(--text-muted)', margin: 0, lineHeight: '1.7', fontStyle: recruiterRemark ? 'normal' : 'italic' }}>
+                          <p style={{
+                            fontSize: '13px',
+                            color: recruiterRemark ? 'var(--text)' : 'var(--text-muted)',
+                            margin: 0, lineHeight: '1.7',
+                            fontStyle: recruiterRemark ? 'normal' : 'italic',
+                          }}>
                             {recruiterRemark || 'No remark added yet. Click "+ Add" to write one.'}
                           </p>
                         </div>
