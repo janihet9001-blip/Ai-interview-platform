@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import SockJS from 'sockjs-client'
 import { Client } from '@stomp/stompjs'
-import PropTypes from 'prop-types'
 import API from '../services/api'
 
 export default function WaitingRoom() {
@@ -14,63 +13,47 @@ export default function WaitingRoom() {
   // Camera state
   const videoRef = useRef(null)
   const streamRef = useRef(null)
-  const [camStatus, setCamStatus] = useState('idle') // idle | loading | active | denied
+  const [camStatus, setCamStatus] = useState('idle')
   const [isMuted, setIsMuted] = useState(false)
   const [isCamOff, setIsCamOff] = useState(false)
   const [error, setError] = useState(null)
   const [checkingSession, setCheckingSession] = useState(true)
 
-  // ✅ Check if user already has a completed session (prevent restart)
   useEffect(() => {
     const checkExistingSession = async () => {
       if (!user?.id) {
         setCheckingSession(false)
         return
       }
-      
       try {
-        // First, check if there's an active session for this user
         const response = await API.get(`/interview/my-sessions`)
         const sessions = response.data || []
-        
-        // Find the most recent session that is COMPLETED or ABANDONED
-const activeSession = sessions.find(s => s.status === 'IN_PROGRESS')
-
-if (activeSession) {
-  // Already in an interview, go there
-  navigate(`/interview/${activeSession.jobRole}?sessionId=${activeSession.id}`, { replace: true })
-  return
-}
+        const activeSession = sessions.find(s => s.status === 'IN_PROGRESS')
+        if (activeSession) {
+          navigate(`/interview/${activeSession.jobRole}?sessionId=${activeSession.id}`, { replace: true })
+          return
+        }
       } catch (err) {
         console.error('Failed to check existing sessions:', err)
-        // Continue to waiting room if check fails
       } finally {
         setCheckingSession(false)
       }
     }
-    
     checkExistingSession()
   }, [user, navigate])
 
-  // Block back button - improved with better cleanup
-useEffect(() => {
-  window.history.replaceState(null, '', '/waiting')
-  window.history.pushState(null, '', '/waiting')
-
-  const handlePopState = () => {
+  useEffect(() => {
+    window.history.replaceState(null, '', '/waiting')
     window.history.pushState(null, '', '/waiting')
-  }
+    const handlePopState = () => { window.history.pushState(null, '', '/waiting') }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
-  window.addEventListener('popstate', handlePopState)
-  return () => window.removeEventListener('popstate', handlePopState)
-}, [])
-  // WebSocket for session start - with reconnection and error handling
   useEffect(() => {
     if (!user?.id || checkingSession) return
-    
     let isSubscribed = true
     let reconnectTimeout = null
-    
     const client = new Client({
       webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
       reconnectDelay: 5000,
@@ -78,12 +61,11 @@ useEffect(() => {
       heartbeatOutgoing: 4000,
       onConnect: () => {
         if (!isSubscribed) return
-        console.log('WebSocket connected in waiting room')
         client.subscribe(`/topic/session/${user.id}`, (msg) => {
           try {
             const data = JSON.parse(msg.body)
             if (isSubscribed) {
-navigate(`/interview/${data.jobRole}?sessionId=${data.id}`, { replace: true })
+              navigate(`/interview/${data.jobRole}?sessionId=${data.id}`, { replace: true })
             }
           } catch (err) {
             console.error('Failed to parse session start message:', err)
@@ -92,529 +74,410 @@ navigate(`/interview/${data.jobRole}?sessionId=${data.id}`, { replace: true })
         })
       },
       onDisconnect: () => {
-        console.log('WebSocket disconnected in waiting room')
         if (isSubscribed) {
-          // Try to reconnect after delay
           reconnectTimeout = setTimeout(() => {
-            if (isSubscribed && !client.connected) {
-              client.activate()
-            }
+            if (isSubscribed && !client.connected) client.activate()
           }, 3000)
         }
       },
-      onStompError: (frame) => {
-        console.error('STOMP error in waiting room:', frame)
-        setError('Connection error. Please refresh the page.')
-      },
-      onWebSocketError: (event) => {
-        console.error('WebSocket error:', event)
-        setError('Network connection issue. Please check your internet.')
-      }
+      onStompError: () => setError('Connection error. Please refresh the page.'),
+      onWebSocketError: () => setError('Network connection issue. Please check your internet.'),
     })
-    
     client.activate()
     stompClient.current = client
-    
     return () => {
       isSubscribed = false
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout)
-      }
-      if (stompClient.current) {
-        try {
-          stompClient.current.deactivate()
-        } catch (e) {
-          // Ignore
-        }
-        stompClient.current = null
-      }
+      if (reconnectTimeout) clearTimeout(reconnectTimeout)
+      if (stompClient.current) { try { stompClient.current.deactivate() } catch (e) {} stompClient.current = null }
     }
   }, [user, navigate, checkingSession])
 
-  // Start camera on mount - with better error handling
   useEffect(() => {
     let mounted = true
     let stream = null
-    
     async function startCamera() {
       if (!mounted) return
       setCamStatus('loading')
       setError(null)
-      
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
-          audio: true 
-        })
-        
-        if (!mounted) {
-          stream.getTracks().forEach(t => t.stop())
-          return
-        }
-        
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return }
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream
         setCamStatus('active')
       } catch (err) {
-        console.error('Camera error:', err)
         if (!mounted) return
-        
-        if (err.name === 'NotAllowedError') {
-          setError('Camera access denied. Please allow camera in browser settings.')
-          setCamStatus('denied')
-        } else if (err.name === 'NotFoundError') {
-          setError('No camera found. Please connect a camera.')
-          setCamStatus('denied')
-        } else {
-          setError('Failed to access camera.')
-          setCamStatus('denied')
-        }
+        if (err.name === 'NotAllowedError') { setError('Camera access denied. Please allow camera in browser settings.'); setCamStatus('denied') }
+        else if (err.name === 'NotFoundError') { setError('No camera found. Please connect a camera.'); setCamStatus('denied') }
+        else { setError('Failed to access camera.'); setCamStatus('denied') }
       }
     }
-    
     startCamera()
-    
     return () => {
       mounted = false
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => {
-          t.stop()
-          t.enabled = false
-        })
-        streamRef.current = null
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
-      }
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => { t.stop(); t.enabled = false }); streamRef.current = null }
+      if (videoRef.current) videoRef.current.srcObject = null
     }
   }, [])
 
   const toggleMute = useCallback(() => {
     if (!streamRef.current) return
-    const audioTracks = streamRef.current.getAudioTracks()
-    audioTracks.forEach(track => {
-      track.enabled = !isMuted
-    })
+    streamRef.current.getAudioTracks().forEach(t => { t.enabled = !isMuted })
     setIsMuted(prev => !prev)
   }, [isMuted])
 
   const toggleCam = useCallback(() => {
     if (!streamRef.current) return
-    const videoTracks = streamRef.current.getVideoTracks()
-    videoTracks.forEach(track => {
-      track.enabled = isCamOff
-    })
+    streamRef.current.getVideoTracks().forEach(t => { t.enabled = isCamOff })
     setIsCamOff(prev => !prev)
   }, [isCamOff])
 
-  // Show loading state while checking session
   if (checkingSession) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'var(--font-body)',
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            border: '3px solid var(--border)',
-            borderTopColor: '#2563EB',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 16px',
-          }} />
-          <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Checking your session...</p>
+      <>
+        <style>{BASE_STYLES}</style>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0A0C12 0%, #06080D 100%)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: '36px', height: '36px', border: '2px solid rgba(255,255,255,0.08)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+            <p style={{ color: '#6B7280', fontSize: '11px', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Checking your session...</p>
+          </div>
         </div>
-      </div>
-    )
-  }
-
-  // Show error state
-  if (error && !camStatus === 'loading') {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'var(--font-body)',
-        padding: '32px 24px',
-      }}>
-        <div style={{
-          background: 'var(--surface)',
-          border: '1px solid #EF4444',
-          borderRadius: 'var(--radius-lg)',
-          padding: '32px',
-          textAlign: 'center',
-          maxWidth: '400px',
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
-          <h2 style={{ fontSize: '20px', color: '#EF4444', marginBottom: '12px' }}>Error</h2>
-          <p style={{ color: 'var(--text-dim)', marginBottom: '24px' }}>{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '10px 24px',
-              background: '#2563EB',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-body)',
-            }}
-          >
-            Refresh Page
-          </button>
-        </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'var(--font-body)',
-      padding: '32px 24px',
-    }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 320px',
-        gap: '40px',
-        width: '100%',
-        maxWidth: '900px',
-        alignItems: 'center',
-      }}>
+    <>
+      <style>{BASE_STYLES}</style>
 
-        {/* ── LEFT: Waiting content ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+      <div className="scene-bg" />
 
-          {/* Spinner */}
-          <div style={{ position: 'relative', width: '100px', height: '100px', marginBottom: '44px' }}>
-            <div style={{
-              position: 'absolute', inset: '-16px', borderRadius: '50%',
-              border: '1px solid rgba(37,99,235,0.12)',
-              animation: 'breathe 3s ease-in-out infinite',
-            }} />
-            <div style={{
-              position: 'absolute', inset: '-6px', borderRadius: '50%',
-              border: '1px solid rgba(255,255,255,0.04)',
-            }} />
-            <div style={{
-              position: 'absolute', inset: 0, borderRadius: '50%',
-              border: '1.5px solid rgba(255,255,255,0.05)',
-              borderTopColor: '#2563EB',
-              borderRightColor: 'rgba(6,182,212,0.4)',
-              animation: 'spin 1.8s linear infinite',
-            }} />
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '10px', height: '10px', borderRadius: '50%',
-              background: '#2563EB',
-              boxShadow: '0 0 16px #2563EB, 0 0 32px rgba(37,99,235,0.4)',
-              animation: 'pulse-dot 1.5s ease-in-out infinite',
-            }} />
+      <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+
+        {/* Navbar */}
+        <nav className="top-nav">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '32px', height: '32px', background: 'linear-gradient(135deg,#FFFFFF,#8E9AA8)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontWeight: '900', fontSize: '11px', color: '#0A0C12', boxShadow: '0 0 12px rgba(255,255,255,0.2)', flexShrink: 0 }}>AI</div>
+            <span className="logo-text">InterviewAI</span>
+            <span className="badge-gray badge-recruiter" style={{ marginLeft: '4px' }}>Candidate</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{ fontSize: '12px', color: '#8E9AA8' }}>{user?.fullName}</span>
+            <button className="btn-ghost-gray" onClick={logout} style={{ padding: '6px 16px', fontSize: '12px' }}>Sign out</button>
+          </div>
+        </nav>
+
+        {/* Main */}
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px 32px' }}>
+
+          {/* Header */}
+          <div style={{ marginBottom: '40px', animation: 'fadeUp 0.4s ease forwards' }}>
+            <p style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'rgba(220,222,230,0.5)', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: '8px' }}>Candidate Portal</p>
+            <h1 className="page-heading">Waiting Room</h1>
           </div>
 
-          <div style={{ animation: 'fadeUp 0.5s ease forwards' }}>
-            <p style={{
-              fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--cyan)',
-              letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '16px',
-            }}>
-              Stand by
-            </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '28px', alignItems: 'flex-start' }}>
 
-            <h1 style={{
-              fontFamily: 'var(--font-display)', fontSize: '36px', fontWeight: '800',
-              marginBottom: '16px', lineHeight: 1.2,
-            }}>
-              Your interview will<br />begin shortly
-            </h1>
+            {/* Left — Status */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeUp 0.5s ease 0.1s forwards', opacity: 0, animationFillMode: 'forwards' }}>
 
-            <p style={{
-              color: 'var(--text-dim)', fontSize: '15px',
-              maxWidth: '340px', margin: '0 auto 36px',
-            }}>
-              Your recruiter is preparing your session. You will be redirected automatically when it starts.
-            </p>
-
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '10px',
-              padding: '12px 20px',
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: '999px', marginBottom: '36px',
-            }}>
-              <div style={{
-                width: '7px', height: '7px', borderRadius: '50%',
-                background: '#06B6D4', boxShadow: '0 0 8px #06B6D4',
-                animation: 'pulse-dot 1.5s ease-in-out infinite',
-              }} />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-dim)' }}>
-                Connected as {user?.fullName}
-              </span>
-            </div>
-
-            <div>
-              <button className="btn-ghost" onClick={logout} style={{ fontSize: '14px' }}>
-                Sign out
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ── RIGHT: Camera panel ── */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: '0',
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          overflow: 'hidden',
-          boxShadow: '0 0 24px rgba(6,182,212,0.08)',
-          animation: 'fadeUp 0.6s ease 0.1s forwards',
-          opacity: 0,
-        }}>
-          {/* Camera header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '10px 14px',
-            background: 'var(--surface2)',
-            borderBottom: '1px solid var(--border)',
-          }}>
-            <div style={{
-              width: '7px', height: '7px', borderRadius: '50%',
-              background: camStatus === 'active' ? 'var(--cyan)' : 'var(--text-muted)',
-              boxShadow: camStatus === 'active' ? '0 0 6px var(--cyan)' : 'none',
-            }} />
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '11px',
-              color: 'var(--text)', letterSpacing: '0.08em', flex: 1,
-            }}>
-              {user?.fullName?.toUpperCase() ?? 'YOU'}
-            </span>
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '9px',
-              letterSpacing: '0.15em', color: 'var(--red)',
-              background: '#EF444415', border: '1px solid #EF444440',
-              borderRadius: '4px', padding: '2px 6px',
-            }}>
-              LIVE
-            </span>
-          </div>
-
-          {/* Video area */}
-          <div style={{
-            position: 'relative', width: '100%', aspectRatio: '4/3',
-            background: '#050810', overflow: 'hidden',
-          }}>
-            {/* Actual video */}
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{
-                width: '100%', height: '100%', objectFit: 'cover',
-                display: 'block', transform: 'scaleX(-1)',
-                opacity: camStatus === 'active' && !isCamOff ? 1 : 0,
-                transition: 'opacity 0.3s',
-              }}
-            />
-
-            {/* Loading state */}
-            {camStatus === 'loading' && (
-              <div style={overlayStyle}>
-                <div style={{
-                  width: '26px', height: '26px', borderRadius: '50%',
-                  border: '2px solid var(--border)', borderTopColor: 'var(--cyan)',
-                  animation: 'spin 0.9s linear infinite',
-                }} />
-                <span style={overlayTextStyle}>Starting camera…</span>
-              </div>
-            )}
-
-            {/* Denied state */}
-            {camStatus === 'denied' && (
-              <div style={overlayStyle}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                  stroke="var(--red)" strokeWidth="1.5">
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                  <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
-                </svg>
-                <span style={{ ...overlayTextStyle, color: 'var(--red)' }}>Camera denied</span>
-                <button
-                  onClick={() => window.location.reload()}
-                  style={{
-                    marginTop: '8px',
-                    padding: '6px 12px',
-                    background: '#2563EB',
-                    border: 'none',
-                    borderRadius: '6px',
-                    color: 'white',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {/* Cam off avatar */}
-            {camStatus === 'active' && isCamOff && (
-              <div style={overlayStyle}>
-                <div style={{
-                  width: '52px', height: '52px', borderRadius: '50%',
-                  background: 'var(--surface3)', border: '2px solid var(--border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'var(--font-display)', fontSize: '22px', color: 'var(--accent)',
-                }}>
-                  {user?.fullName?.[0]?.toUpperCase() ?? '?'}
+              {/* Status card */}
+              <div className="panel"
+                onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x', `${((e.clientX - r.left) / r.width) * 100}%`); e.currentTarget.style.setProperty('--mouse-y', `${((e.clientY - r.top) / r.height) * 100}%`) }}>
+                <div className="panel-header">
+                  <div className="panel-step">
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px rgba(16,185,129,0.5)', animation: 'pulse-dot 2s infinite' }} />
+                  </div>
+                  <span className="panel-title">Session Status</span>
+                  <span className="badge-gray badge-live" style={{ marginLeft: 'auto' }}>Live</span>
                 </div>
-                <span style={overlayTextStyle}>Camera off</span>
+                <div className="panel-body">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      {/* Spinner */}
+                      <div style={{ position: 'relative', width: '64px', height: '64px', flexShrink: 0 }}>
+                        <div style={{ position: 'absolute', inset: '-8px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.05)', animation: 'breathe 3s ease-in-out infinite' }} />
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.05)', borderTopColor: 'rgba(255,255,255,0.5)', borderRightColor: 'rgba(255,255,255,0.2)', animation: 'spin 2s linear infinite' }} />
+                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '8px', height: '8px', borderRadius: '50%', background: '#E5E7EB', boxShadow: '0 0 12px rgba(229,231,235,0.6)', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+                      </div>
+                      <div>
+                        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '800', color: '#F3F4F6', margin: '0 0 6px', letterSpacing: '-0.02em' }}>Your interview will begin shortly</h2>
+                        <p style={{ fontSize: '13px', color: '#8E9AA8', lineHeight: '1.6', margin: 0 }}>Your recruiter is preparing your session. You will be redirected automatically when it starts.</p>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px rgba(16,185,129,0.4)', animation: 'pulse-dot 2s infinite', flexShrink: 0 }} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#D1D5DB' }}>Connected as <strong style={{ color: '#F3F4F6' }}>{user?.fullName}</strong></span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
 
-            {/* Scan line when active */}
-            {camStatus === 'active' && !isCamOff && (
-              <div style={{
-                position: 'absolute', left: 0, right: 0, height: '1px',
-                background: 'linear-gradient(90deg, transparent, var(--cyan), transparent)',
-                opacity: 0.3, animation: 'scanline 3s linear infinite',
-                pointerEvents: 'none',
-              }} />
-            )}
+              {/* Tips card */}
+              <div className="panel"
+                onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x', `${((e.clientX - r.left) / r.width) * 100}%`); e.currentTarget.style.setProperty('--mouse-y', `${((e.clientY - r.top) / r.height) * 100}%`) }}>
+                <div className="panel-header">
+                  <div className="panel-step" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: '700', color: '#9CA3AF' }}>i</div>
+                  <span className="panel-title">Before You Begin</span>
+                </div>
+                <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    'Ensure you are in a quiet, well-lit environment',
+                    'Close all unnecessary tabs and applications',
+                    'Do not use AI tools or search engines during the interview',
+                    'All activity is monitored — answer in your own words',
+                    'Keep your camera on and visible throughout',
+                  ].map((tip, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '7px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#6B7280', marginTop: '5px', flexShrink: 0 }} />
+                      <span style={{ fontSize: '12px', color: '#9CA3AF', lineHeight: '1.5' }}>{tip}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-            {/* Corner brackets */}
-            {[
-              { top: 8, left: 8, borderTop: '2px solid var(--cyan)', borderLeft: '2px solid var(--cyan)' },
-              { top: 8, right: 8, borderTop: '2px solid var(--cyan)', borderRight: '2px solid var(--cyan)' },
-              { bottom: 8, left: 8, borderBottom: '2px solid var(--cyan)', borderLeft: '2px solid var(--cyan)' },
-              { bottom: 8, right: 8, borderBottom: '2px solid var(--cyan)', borderRight: '2px solid var(--cyan)' },
-            ].map((style, i) => (
-              <div key={i} style={{ position: 'absolute', width: 14, height: 14, opacity: 0.6, ...style }} />
-            ))}
-          </div>
-
-          {/* Controls */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '8px 12px 10px', flexWrap: 'wrap',
-          }}>
-            <button
-              onClick={toggleMute}
-              style={isMuted ? camBtnActiveStyle : camBtnStyle}
-              title={isMuted ? 'Unmute' : 'Mute'}
-              disabled={camStatus !== 'active'}
-            >
-              {isMuted ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                  <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-                  <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
+              {/* Error */}
+              {error && (
+                <div style={{ padding: '12px 16px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '10px', borderLeft: '3px solid #F87171' }}>
+                  <p style={{ fontSize: '12px', color: '#F87171', margin: 0, fontFamily: 'var(--font-mono)' }}>{error}</p>
+                </div>
               )}
-              <span>{isMuted ? 'Unmute' : 'Mute'}</span>
-            </button>
 
-            <button
-              onClick={toggleCam}
-              style={isCamOff ? camBtnActiveStyle : camBtnStyle}
-              title={isCamOff ? 'Turn on camera' : 'Turn off camera'}
-              disabled={camStatus !== 'active'}
-            >
-              {isCamOff ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="23 7 16 12 23 17 23 7" />
-                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                </svg>
-              )}
-              <span>{isCamOff ? 'Start Cam' : 'Stop Cam'}</span>
-            </button>
-
-            <div style={{
-              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px',
-              fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-dim)',
-            }}>
-              <span style={{
-                width: '6px', height: '6px', borderRadius: '50%',
-                background: camStatus === 'active' ? 'var(--green)' : 'var(--red)',
-                display: 'inline-block',
-                animation: camStatus === 'active' ? 'pulse-dot 2s infinite' : 'none',
-              }} />
-              {camStatus === 'active' ? 'Live' : camStatus}
             </div>
-          </div>
 
-          {/* Info strip */}
-          <div style={{
-            padding: '8px 14px',
-            borderTop: '1px solid var(--border)',
-            background: 'var(--surface2)',
-          }}>
-            <p style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
-              color: 'var(--text-muted)', margin: 0, lineHeight: 1.5,
-            }}>
-              Your camera is visible to the recruiter during the interview. Ensure good lighting.
-            </p>
+            {/* Right — Camera panel */}
+            <div style={{ animation: 'fadeUp 0.5s ease 0.2s forwards', opacity: 0, animationFillMode: 'forwards' }}>
+              <div className="panel" style={{ overflow: 'hidden' }}
+                onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x', `${((e.clientX - r.left) / r.width) * 100}%`); e.currentTarget.style.setProperty('--mouse-y', `${((e.clientY - r.top) / r.height) * 100}%`) }}>
+
+                {/* Camera header */}
+                <div className="panel-header" style={{ justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: camStatus === 'active' ? '#10B981' : '#4B5563', display: 'inline-block', ...(camStatus === 'active' ? { animation: 'pulse-dot 2s infinite', boxShadow: '0 0 6px rgba(16,185,129,0.4)' } : {}) }} />
+                    <span className="panel-title">{user?.fullName?.toUpperCase() ?? 'YOU'}</span>
+                  </div>
+                  <span className="badge-gray badge-live">LIVE</span>
+                </div>
+
+                {/* Video */}
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '4/3', background: '#050810', overflow: 'hidden' }}>
+                  <video ref={videoRef} autoPlay playsInline muted
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transform: 'scaleX(-1)', opacity: camStatus === 'active' && !isCamOff ? 1 : 0, transition: 'opacity 0.3s' }} />
+
+                  {camStatus === 'loading' && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(10,12,18,0.95)' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.08)', borderTopColor: 'rgba(255,255,255,0.5)', animation: 'spin 0.9s linear infinite' }} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#6B7280', letterSpacing: '0.1em' }}>Starting camera...</span>
+                    </div>
+                  )}
+
+                  {camStatus === 'denied' && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'rgba(10,12,18,0.95)' }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="1.5">
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                        <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
+                      </svg>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#F87171', letterSpacing: '0.08em' }}>Camera denied</span>
+                      <button onClick={() => window.location.reload()}
+                        style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', color: '#E5E7EB', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
+                  {camStatus === 'active' && isCamOff && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(10,12,18,0.95)' }}>
+                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: '22px', color: '#6B7280', fontWeight: '700' }}>
+                        {user?.fullName?.[0]?.toUpperCase() ?? '?'}
+                      </div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#6B7280' }}>Camera off</span>
+                    </div>
+                  )}
+
+                  {/* Scanline */}
+                  {camStatus === 'active' && !isCamOff && (
+                    <div style={{ position: 'absolute', left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)', opacity: 0.4, animation: 'scanline 3s linear infinite', pointerEvents: 'none' }} />
+                  )}
+
+                  {/* Corner brackets */}
+                  {[
+                    { top: 8, left: 8, borderTop: '1.5px solid rgba(255,255,255,0.3)', borderLeft: '1.5px solid rgba(255,255,255,0.3)' },
+                    { top: 8, right: 8, borderTop: '1.5px solid rgba(255,255,255,0.3)', borderRight: '1.5px solid rgba(255,255,255,0.3)' },
+                    { bottom: 8, left: 8, borderBottom: '1.5px solid rgba(255,255,255,0.3)', borderLeft: '1.5px solid rgba(255,255,255,0.3)' },
+                    { bottom: 8, right: 8, borderBottom: '1.5px solid rgba(255,255,255,0.3)', borderRight: '1.5px solid rgba(255,255,255,0.3)' },
+                  ].map((s, i) => (
+                    <div key={i} style={{ position: 'absolute', width: 14, height: 14, opacity: 0.7, ...s }} />
+                  ))}
+                </div>
+
+                {/* Controls */}
+                <div className="panel-body" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={toggleMute} disabled={camStatus !== 'active'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isMuted ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)', border: isMuted ? '1px solid rgba(248,113,113,0.3)' : '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', padding: '6px 12px', color: isMuted ? '#F87171' : '#9CA3AF', fontFamily: 'var(--font-mono)', fontSize: '11px', cursor: camStatus !== 'active' ? 'not-allowed' : 'pointer', opacity: camStatus !== 'active' ? 0.4 : 1, transition: 'all 0.2s' }}>
+                    {isMuted ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23" /><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" /><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+                    )}
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </button>
+
+                  <button onClick={toggleCam} disabled={camStatus !== 'active'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isCamOff ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)', border: isCamOff ? '1px solid rgba(248,113,113,0.3)' : '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', padding: '6px 12px', color: isCamOff ? '#F87171' : '#9CA3AF', fontFamily: 'var(--font-mono)', fontSize: '11px', cursor: camStatus !== 'active' ? 'not-allowed' : 'pointer', opacity: camStatus !== 'active' ? 0.4 : 1, transition: 'all 0.2s' }}>
+                    {isCamOff ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                    )}
+                    {isCamOff ? 'Start Cam' : 'Stop Cam'}
+                  </button>
+
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#6B7280' }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: camStatus === 'active' ? '#10B981' : '#F87171', display: 'inline-block', animation: camStatus === 'active' ? 'pulse-dot 2s infinite' : 'none' }} />
+                    {camStatus === 'active' ? 'Live' : camStatus}
+                  </div>
+                </div>
+
+                {/* Info strip */}
+                <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.01)' }}>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#4B5563', margin: 0, lineHeight: 1.5 }}>
+                    Your camera is visible to the recruiter. Ensure good lighting.
+                  </p>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes scanline { 0% { top: 0 } 100% { top: 100% } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
-      `}</style>
-    </div>
+    </>
   )
 }
 
-// Shared inline styles
-const overlayStyle = {
-  position: 'absolute', inset: 0,
-  display: 'flex', flexDirection: 'column',
-  alignItems: 'center', justifyContent: 'center', gap: '10px',
-  background: 'var(--surface2)',
-}
-const overlayTextStyle = {
-  fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)',
-}
-const camBtnStyle = {
-  display: 'flex', alignItems: 'center', gap: '5px',
-  background: 'var(--surface2)', border: '1px solid var(--border)',
-  borderRadius: '6px', padding: '5px 10px',
-  color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '10px',
-  cursor: 'pointer', transition: 'all 0.15s',
-}
-const camBtnActiveStyle = {
-  display: 'flex', alignItems: 'center', gap: '5px',
-  background: '#EF444420', border: '1px solid #EF444450',
-  borderRadius: '6px', padding: '5px 10px',
-  color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: '10px',
-  cursor: 'pointer', transition: 'all 0.15s',
-}
+const BASE_STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg-dark: #0A0C12;
+    --bg-darker: #06080D;
+    --bg-surface: #0F121A;
+    --bg-surface-light: #151A24;
+    --border: rgba(255,255,255,0.05);
+    --border-light: rgba(255,255,255,0.08);
+    --text: #E8EDF2;
+    --text-dim: #8E9AA8;
+    --text-muted: #4A5568;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-display: 'Inter', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-lg: 16px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body, #root {
+    background: linear-gradient(135deg, #0A0C12 0%, #06080D 100%);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+
+  .scene-bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(30,40,60,0.25) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 35% at 85% 80%, rgba(20,30,50,0.2) 0%, transparent 60%);
+  }
+
+  .top-nav {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 36px; height: 64px;
+    background: rgba(10,12,18,0.85);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(20px);
+  }
+
+  .logo-text {
+    font-family: var(--font-display); font-weight: 800; font-size: 18px;
+    background: linear-gradient(110deg, #FFFFFF 20%, #8E9AA8 45%, #FFFFFF 70%);
+    background-size: 200% auto;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    animation: shimmer-premium 4s linear infinite; letter-spacing: -0.02em;
+  }
+
+  .page-heading {
+    font-family: var(--font-display); font-size: 32px; font-weight: 800;
+    background: linear-gradient(110deg, #FFFFFF 25%, #8E9AA8 50%, #FFFFFF 75%);
+    background-size: 200% auto;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    animation: shimmer-premium 5s linear infinite; letter-spacing: -0.03em;
+  }
+
+  .panel {
+    background: linear-gradient(145deg, #0F121A 0%, rgba(15,18,26,0.95) 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    position: relative; isolation: isolate;
+    transition: border-color 0.2s, transform 0.2s;
+    overflow: hidden;
+  }
+  .panel::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle 180px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
+    opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+  }
+  .panel:hover { border-color: rgba(255,255,255,0.16); }
+  .panel:hover::before { opacity: 1; }
+
+  .panel-header {
+    padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-step {
+    width: 20px; height: 20px; border-radius: 5px;
+    background: rgba(255,255,255,0.07);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-family: var(--font-mono); font-weight: 700; color: #9CA3AF;
+  }
+  .panel-title {
+    font-size: 10px; font-family: var(--font-mono); color: #6B7280;
+    letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600;
+  }
+  .panel-body { padding: 12px 14px; }
+
+  .badge-gray { font-size: 9px; font-weight: 600; font-family: monospace; border-radius: 20px; padding: 2px 10px; letter-spacing: 0.06em; }
+  .badge-live { background: rgba(229,231,235,0.1); color: #E5E7EB; border: 1px solid rgba(229,231,235,0.25); animation: pulse-glow 2s infinite; }
+  .badge-recruiter { background: rgba(255,255,255,0.05); color: #9CA3AF; border: 1px solid rgba(255,255,255,0.08); }
+
+  .btn-ghost-gray {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; color: #9CA3AF; cursor: pointer;
+    font-family: var(--font-body); font-size: 12px;
+    transition: all 0.25s ease;
+  }
+  .btn-ghost-gray:hover {
+    border-color: rgba(255,255,255,0.25);
+    color: #E5E7EB;
+    background: rgba(255,255,255,0.05);
+  }
+
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulse-dot { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+  @keyframes pulse-glow { 0%, 100% { opacity: .8; } 50% { opacity: 1; box-shadow: 0 0 8px rgba(229,231,235,0.35); } }
+  @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
+  @keyframes scanline { 0% { top: 0; } 100% { top: 100%; } }
+  @keyframes shimmer-premium { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+`

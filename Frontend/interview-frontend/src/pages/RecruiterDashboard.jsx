@@ -8,19 +8,12 @@ import ResumeScreeningTab from './ResumeScreeningTab'
 import CandidatesTab from './CandidatesTab'
 import PropTypes from 'prop-types'
 
-const JOB_ROLES = [
-  'JAVA_DEVELOPER',
-  'PYTHON_DEVELOPER',
-  'REACT_DEVELOPER',
-]
+const JOB_ROLES = ['JAVA_DEVELOPER', 'PYTHON_DEVELOPER', 'REACT_DEVELOPER']
 
 const pctColor = (pct) =>
-  pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
+  pct >= 70 ? '#E5E7EB' : pct >= 45 ? '#D1D5DB' : '#9CA3AF'
 
-// PropTypes for helper functions (optional but good for quality)
-pctColor.propTypes = {
-  pct: PropTypes.number,
-}
+pctColor.propTypes = { pct: PropTypes.number }
 
 export default function RecruiterDashboard() {
   const [violationCount, setViolationCount] = useState(0)
@@ -29,11 +22,9 @@ export default function RecruiterDashboard() {
   const [sessionSearch, setSessionSearch] = useState('')
   const [allCompletedSessions, setAllCompletedSessions] = useState([])
   const { user, logout } = useAuth()
-
   const [candidates, setCandidates] = useState([])
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [selectedRole, setSelectedRole] = useState('JAVA_DEVELOPER')
-
   const [completedSessions, setCompletedSessions] = useState([])
   const [analysisQuestions, setAnalysisQuestions] = useState({})
   const [analysisLoading, setAnalysisLoading] = useState(false)
@@ -68,20 +59,10 @@ export default function RecruiterDashboard() {
     userName: s.userName, userId: s.userId, actualQuestions: s.actualQuestions,
   })
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-      if (stompClient.current) {
-        try {
-          stompClient.current.deactivate()
-        } catch (e) {
-          // Ignore
-        }
-        stompClient.current = null
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (stompClient.current) { try { stompClient.current.deactivate() } catch (e) {} stompClient.current = null }
     }
   }, [])
 
@@ -89,33 +70,16 @@ export default function RecruiterDashboard() {
     let cancelled = false
     async function loadAll() {
       try {
-        const [usersRes, sessionsRes] = await Promise.all([
-          api.get('/users/all'),
-          api.get('/interview/all-sessions'),
-        ])
+        const [usersRes, sessionsRes] = await Promise.all([api.get('/users/all'), api.get('/interview/all-sessions')])
         if (cancelled) return
         const filtered = (usersRes.data || []).filter(u => u.role === 'USER')
         setCandidates(filtered)
         const saved = sessionStorage.getItem('recruiter_selected_candidate')
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved)
-            const found = filtered.find(c => c.id === parsed.id)
-            if (found) setSelectedCandidate(found)
-          } catch {}
-        }
-        const completed = (sessionsRes.data || [])
-          .map(parseSession)
-          .filter(s => s.status === 'COMPLETED')
-          .sort((a, b) => b.id - a.id)
-        setAllCompletedSessions(completed)
-        setCompletedSessions(completed.slice(0, 10))
-      } catch (err) {
-        if (err?.response?.status === 403) pollingStoppedRef.current = true
-        console.error('Failed to load data:', err)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+        if (saved) { try { const parsed = JSON.parse(saved); const found = filtered.find(c => c.id === parsed.id); if (found) setSelectedCandidate(found) } catch {} }
+        const completed = (sessionsRes.data || []).map(parseSession).filter(s => s.status === 'COMPLETED').sort((a, b) => b.id - a.id)
+        setAllCompletedSessions(completed); setCompletedSessions(completed.slice(0, 10))
+      } catch (err) { if (err?.response?.status === 403) pollingStoppedRef.current = true; console.error('Failed to load data:', err) }
+      finally { if (!cancelled) setLoading(false) }
     }
     loadAll()
     return () => { cancelled = true }
@@ -123,347 +87,113 @@ export default function RecruiterDashboard() {
 
   const fetchCompletedSessions = useCallback(() => {
     if (pollingStoppedRef.current) return
-    api.get('/interview/all-sessions')
-      .then(res => {
-        const completed = (res.data || [])
-          .map(parseSession)
-          .filter(s => s.status === 'COMPLETED')
-          .sort((a, b) => b.id - a.id)
-        setAllCompletedSessions(completed)
-        setCompletedSessions(completed.slice(0, 10))
-      })
-      .catch(err => { 
-        if (err?.response?.status === 403) pollingStoppedRef.current = true
-        console.error('Failed to fetch sessions:', err)
-      })
+    api.get('/interview/all-sessions').then(res => {
+      const completed = (res.data || []).map(parseSession).filter(s => s.status === 'COMPLETED').sort((a, b) => b.id - a.id)
+      setAllCompletedSessions(completed); setCompletedSessions(completed.slice(0, 10))
+    }).catch(err => { if (err?.response?.status === 403) pollingStoppedRef.current = true; console.error('Failed to fetch sessions:', err) })
   }, [])
 
   const loadAnalysisForSession = useCallback(async (sessionId) => {
     if (!sessionId) return
     if (analysisQuestions[sessionId]) { setReportSessionId(sessionId); return }
-    setAnalysisLoading(true)
-    setReportSessionId(sessionId)
-
+    setAnalysisLoading(true); setReportSessionId(sessionId)
     try {
       const res = await api.get(`/interview/${sessionId}/questions`)
-      const allParsed = (res.data || [])
-        .filter(q =>
-          Number(q.questionNumber) === 999 ||
-          (q.userAnswer && q.userAnswer.trim() !== '')
-        )
-        .map(q => ({
-          questionNumber: q.questionNumber,
-          questionText: q.questiontext || q.questionText || 'Question unavailable',
-          userAnswer: q.userAnswer,
-          score: q.score,
-          aiFeedback: q.aiFeedback || null,
-          confidence: null, authenticity: null, accuracy: null,
-          suspicious: false,
-          reason: 'Full analysis only available when interview was completed via Finish button.',
-          isRecruiterQuestion: Number(q.questionNumber) === 999,
-        }))
+      const allParsed = (res.data || []).filter(q => Number(q.questionNumber) === 999 || (q.userAnswer && q.userAnswer.trim() !== '')).map(q => ({
+        questionNumber: q.questionNumber, questionText: q.questiontext || q.questionText || 'Question unavailable',
+        userAnswer: q.userAnswer, score: q.score, aiFeedback: q.aiFeedback || null,
+        confidence: null, authenticity: null, accuracy: null, suspicious: false,
+        reason: 'Full analysis only available when interview was completed via Finish button.',
+        isRecruiterQuestion: Number(q.questionNumber) === 999,
+      }))
       setAnalysisQuestions(prev => ({ ...prev, [sessionId]: allParsed }))
-    } catch (err) {
-      if (err?.response?.status === 403) pollingStoppedRef.current = true
-      console.error('Failed to load analysis:', err)
-      setAnalysisQuestions(prev => ({ ...prev, [sessionId]: [] }))
-    } finally {
-      setAnalysisLoading(false)
-    }
+    } catch (err) { if (err?.response?.status === 403) pollingStoppedRef.current = true; console.error('Failed to load analysis:', err); setAnalysisQuestions(prev => ({ ...prev, [sessionId]: [] })) }
+    finally { setAnalysisLoading(false) }
   }, [analysisQuestions])
 
   const reportAutoLoadedRef = useRef(false)
   useEffect(() => {
-    if (activeTab === 'reports' && completedSessions.length > 0 && !reportSessionId && !reportAutoLoadedRef.current) {
-      reportAutoLoadedRef.current = true
-      loadAnalysisForSession(completedSessions[0].id)
-    }
+    if (activeTab === 'reports' && completedSessions.length > 0 && !reportSessionId && !reportAutoLoadedRef.current) { reportAutoLoadedRef.current = true; loadAnalysisForSession(completedSessions[0].id) }
   }, [activeTab, completedSessions, reportSessionId, loadAnalysisForSession])
-
   useEffect(() => { reportAutoLoadedRef.current = false }, [completedSessions])
 
-  // WebSocket connection with cleanup
   useEffect(() => {
     if (!activeSessionId) return
-    
-    setWsConnected(false)
-    let isSubscribed = true
-    
+    setWsConnected(false); let isSubscribed = true
     const client = new Client({
-      webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL),
-      reconnectDelay: 2000,
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
+      webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL), reconnectDelay: 2000, heartbeatIncoming: 4000, heartbeatOutgoing: 4000,
       onConnect: () => {
-        if (!isSubscribed) return
-        setWsConnected(true)
-        
-        client.subscribe(`/topic/typing/${activeSessionId}`, (msg) => {
-          try {
-            const data = JSON.parse(msg.body)
-            const key = data.questionNumber === 'R' ? 'R' : data.questionNumber
-            setLiveFeed(prev => ({ ...prev, [key]: { ...(prev[key] || {}), questionText: data.questionText, currentAnswer: data.currentAnswer, status: data.status } }))
-          } catch (err) {
-            console.error('Failed to parse typing message:', err)
-          }
-        })
-        
-        client.subscribe(`/topic/feedback/${activeSessionId}`, (msg) => {
-          try {
-            const feedback = JSON.parse(msg.body)
-            if (feedback.questionId == null) return
-            setLiveFeed(prev => {
-              const updated = { ...prev }
-              Object.keys(updated).forEach(key => {
-                if (updated[key].status === 'SUBMITTED' && updated[key].score == null && key !== 'R' && String(key) === String(feedback.questionsAnswered)) {
-                  updated[key] = { ...updated[key], score: feedback.score }
-                }
-              })
-              return updated
-            })
-          } catch (err) {
-            console.error('Failed to parse feedback message:', err)
-          }
-        })
-        
-        client.subscribe(`/topic/proctoring`, (msg) => {
-          try {
-            const event = JSON.parse(msg.body)
-            if (String(event.sessionId) === String(activeSessionId)) {
-              setProctoringAlerts(prev => [event, ...prev].slice(0, 50))
-              setViolationCount(prev => {
-                const newCount = prev + 1
-                if (newCount === 1) {
-                  stompClient.current?.publish({ 
-                    destination: '/app/warning', 
-                    body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }) 
-                  })
-                }
-                if (newCount >= 2) { 
-                  setLatestViolation(event)
-                  setShowEndPopup(true)
-                }
-                return newCount
-              })
-            }
-          } catch (err) {
-            console.error('Failed to parse proctoring message:', err)
-          }
-        })
+        if (!isSubscribed) return; setWsConnected(true)
+        client.subscribe(`/topic/typing/${activeSessionId}`, (msg) => { try { const data = JSON.parse(msg.body); const key = data.questionNumber === 'R' ? 'R' : data.questionNumber; setLiveFeed(prev => ({ ...prev, [key]: { ...(prev[key] || {}), questionText: data.questionText, currentAnswer: data.currentAnswer, status: data.status } })) } catch (err) { console.error('Failed to parse typing message:', err) } })
+        client.subscribe(`/topic/feedback/${activeSessionId}`, (msg) => { try { const feedback = JSON.parse(msg.body); if (feedback.questionId == null) return; setLiveFeed(prev => { const updated = { ...prev }; Object.keys(updated).forEach(key => { if (updated[key].status === 'SUBMITTED' && updated[key].score == null && key !== 'R' && String(key) === String(feedback.questionsAnswered)) { updated[key] = { ...updated[key], score: feedback.score } } }); return updated }) } catch (err) { console.error('Failed to parse feedback message:', err) } })
+        client.subscribe(`/topic/proctoring`, (msg) => { try { const event = JSON.parse(msg.body); if (String(event.sessionId) === String(activeSessionId)) { setProctoringAlerts(prev => [event, ...prev].slice(0, 50)); setViolationCount(prev => { const newCount = prev + 1; if (newCount === 1) stompClient.current?.publish({ destination: '/app/warning', body: JSON.stringify({ sessionId: activeSessionId, action: 'WARN' }) }); if (newCount >= 2) { setLatestViolation(event); setShowEndPopup(true) }; return newCount }) } } catch (err) { console.error('Failed to parse proctoring message:', err) } })
       },
-      onDisconnect: () => {
-        if (isSubscribed) setWsConnected(false)
-      },
-      onStompError: (frame) => {
-        console.error('STOMP error:', frame)
-        setWsConnected(false)
-      },
-      onWebSocketError: (event) => {
-        console.error('WebSocket error:', event)
-        setWsConnected(false)
-      }
+      onDisconnect: () => { if (isSubscribed) setWsConnected(false) },
+      onStompError: (frame) => { console.error('STOMP error:', frame); setWsConnected(false) },
+      onWebSocketError: (event) => { console.error('WebSocket error:', event); setWsConnected(false) }
     })
-    
-    client.activate()
-    stompClient.current = client
-    
-    return () => {
-      isSubscribed = false
-      if (stompClient.current) {
-        try {
-          stompClient.current.deactivate()
-        } catch (e) {
-          // Ignore
-        }
-        stompClient.current = null
-      }
-      setWsConnected(false)
-    }
+    client.activate(); stompClient.current = client
+    return () => { isSubscribed = false; if (stompClient.current) { try { stompClient.current.deactivate() } catch (e) {} stompClient.current = null }; setWsConnected(false) }
   }, [activeSessionId])
 
   const handleStart = () => {
-    if (!selectedCandidate) { 
-      setMessage('Select a candidate first')
-      setMessageType('error')
-      return 
-    }
-    setStarting(true)
-    setMessage('')
-    setLiveFeed({})
-    setProctoringAlerts([])
-    setIsPaused(false)
-    setIsStopped(false)
-    setWsConnected(false)
-    
+    if (!selectedCandidate) { setMessage('Select a candidate first'); setMessageType('error'); return }
+    setStarting(true); setMessage(''); setLiveFeed({}); setProctoringAlerts([]); setIsPaused(false); setIsStopped(false); setWsConnected(false)
     api.post('/interview/start', { candidateId: selectedCandidate.id, jobRole: selectedRole })
-      .then(res => {
-        setMessage(`Interview started for ${selectedCandidate.fullName} — Session #${res.data.id}`)
-        setMessageType('success')
-        setActiveSessionId(res.data.id)
-        setStarting(false)
-      })
-      .catch((err) => {
-        console.error('Failed to start interview:', err)
-        setMessage('Failed to start interview.')
-        setMessageType('error')
-        setStarting(false)
-      })
+      .then(res => { setMessage(`Interview started for ${selectedCandidate.fullName} — Session #${res.data.id}`); setMessageType('success'); setActiveSessionId(res.data.id); setStarting(false) })
+      .catch((err) => { console.error('Failed to start interview:', err); setMessage('Failed to start interview.'); setMessageType('error'); setStarting(false) })
   }
 
   const handleEndForCheating = () => {
     if (!stompClient.current?.connected || !activeSessionId) return
-    
-    try {
-      stompClient.current.publish({ 
-        destination: '/app/warning', 
-        body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }) 
-      })
-      stompClient.current.publish({ 
-        destination: '/app/pause', 
-        body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) 
-      })
-      api.post(`/interview/${activeSessionId}/complete`).catch(() => {})
-    } catch (err) {
-      console.error('Failed to end interview:', err)
-    }
-    
-    setShowEndPopup(false)
-    setViolationCount(0)
-    setIsStopped(true)
-    setIsPaused(true)
-    setMessage('Interview terminated due to repeated violations.')
-    setMessageType('error')
-    
-    setTimeout(() => {
-      setActiveSessionId(null)
-      setLiveFeed({})
-      setProctoringAlerts([])
-      setIsPaused(false)
-      setIsStopped(false)
-      setWsConnected(false)
-      setViolationCount(0)
-      fetchCompletedSessions()
-    }, 2000)
+    try { stompClient.current.publish({ destination: '/app/warning', body: JSON.stringify({ sessionId: activeSessionId, action: 'END_FOR_CHEATING' }) }); stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) }); api.post(`/interview/${activeSessionId}/complete`).catch(() => {}) } catch (err) { console.error('Failed to end interview:', err) }
+    setShowEndPopup(false); setViolationCount(0); setIsStopped(true); setIsPaused(true); setMessage('Interview terminated due to repeated violations.'); setMessageType('error')
+    setTimeout(() => { setActiveSessionId(null); setLiveFeed({}); setProctoringAlerts([]); setIsPaused(false); setIsStopped(false); setWsConnected(false); setViolationCount(0); fetchCompletedSessions() }, 2000)
   }
 
   const handlePauseResume = () => {
     if (!stompClient.current?.connected || !activeSessionId || isStopped) return
-    const action = isPaused ? 'RESUME' : 'PAUSE'
-    stompClient.current.publish({ 
-      destination: '/app/pause', 
-      body: JSON.stringify({ sessionId: activeSessionId, action }) 
-    })
-    setIsPaused(!isPaused)
+    stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: isPaused ? 'RESUME' : 'PAUSE' }) }); setIsPaused(!isPaused)
   }
 
   const handleStop = () => {
     if (!stompClient.current?.connected || !activeSessionId) return
     if (!window.confirm('Are you sure you want to end this interview?')) return
-    
-    try {
-      stompClient.current.publish({ 
-        destination: '/app/pause', 
-        body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) 
-      })
-      api.post(`/interview/${activeSessionId}/complete`).catch(() => {})
-    } catch (err) {
-      console.error('Failed to stop interview:', err)
-    }
-    
-    setIsStopped(true)
-    setIsPaused(true)
-    
-    setTimeout(() => {
-      const endedSessionId = activeSessionId
-      setActiveSessionId(null)
-      setLiveFeed({})
-      setProctoringAlerts([])
-      setIsPaused(false)
-      setIsStopped(false)
-      setWsConnected(false)
-      setMessage('Interview ended. Report available in Analysis Reports tab.')
-      setMessageType('success')
-      pollingStoppedRef.current = false
-      fetchCompletedSessions()
-      localStorage.removeItem(`interview_analysis_${endedSessionId}`)
-      setAnalysisQuestions(prev => { const u = { ...prev }; delete u[endedSessionId]; return u })
-      setReportSessionId(null)
-      reportAutoLoadedRef.current = false
-    }, 2000)
+    try { stompClient.current.publish({ destination: '/app/pause', body: JSON.stringify({ sessionId: activeSessionId, action: 'STOP' }) }); api.post(`/interview/${activeSessionId}/complete`).catch(() => {}) } catch (err) { console.error('Failed to stop interview:', err) }
+    setIsStopped(true); setIsPaused(true)
+    setTimeout(() => { const endedSessionId = activeSessionId; setActiveSessionId(null); setLiveFeed({}); setProctoringAlerts([]); setIsPaused(false); setIsStopped(false); setWsConnected(false); setMessage('Interview ended. Report available in Analysis Reports tab.'); setMessageType('success'); pollingStoppedRef.current = false; fetchCompletedSessions(); localStorage.removeItem(`interview_analysis_${endedSessionId}`); setAnalysisQuestions(prev => { const u = { ...prev }; delete u[endedSessionId]; return u }); setReportSessionId(null); reportAutoLoadedRef.current = false }, 2000)
   }
 
   const handleRecruiterQuestion = () => {
     if (!recruiterQuestion.trim() || !activeSessionId) return
-    if (!stompClient.current?.connected) { 
-      alert('WebSocket not connected yet.')
-      return 
-    }
-    
-    setLiveFeed(prev => ({ 
-      ...prev, 
-      R: { questionText: recruiterQuestion, currentAnswer: '', status: 'TYPING' } 
-    }))
-    
-    stompClient.current.publish({ 
-      destination: '/app/recruiter-question', 
-      body: JSON.stringify({ sessionId: activeSessionId, question: recruiterQuestion }) 
-    })
-    setRecruiterQuestion('')
+    if (!stompClient.current?.connected) { alert('WebSocket not connected yet.'); return }
+    setLiveFeed(prev => ({ ...prev, R: { questionText: recruiterQuestion, currentAnswer: '', status: 'TYPING' } }))
+    stompClient.current.publish({ destination: '/app/recruiter-question', body: JSON.stringify({ sessionId: activeSessionId, question: recruiterQuestion }) }); setRecruiterQuestion('')
   }
 
-  const handleTabClick = (tabId) => { 
-    mountedTabs.current.add(tabId)
-    setActiveTab(tabId)
-  }
-
-  const getEventIcon = (t) => ({ 
-    PASTE_DETECTED: '📋', 
-    RIGHT_CLICK: '🖱️', 
-    KEYBOARD_SHORTCUT: '⌨️', 
-    ALT_TAB_DETECTED: '🪟', 
-    WINDOW_BLUR: '👁️' 
-  }[t] || '⚠️')
-  
-  const formatEventType = (t) => ({ 
-    PASTE_DETECTED: 'Paste Detected!', 
-    RIGHT_CLICK: 'Right Click Attempted', 
-    KEYBOARD_SHORTCUT: 'Keyboard Shortcut Blocked', 
-    ALT_TAB_DETECTED: 'Alt+Tab Attempted', 
-    WINDOW_BLUR: 'Window Switch Detected' 
-  }[t] || t)
-  
-  const getAlertDescription = (e) => {
-    if (e.pastedText) return `Pasted: "${e.pastedText.substring(0, 100)}${e.pastedText.length > 100 ? '...' : ''}"`
-    if (e.shortcutKey) return `Shortcut: ${e.shortcutKey} - ${e.details || 'Attempted blocked action'}`
-    return e.details || 'Proctoring violation detected'
-  }
+  const handleTabClick = (tabId) => { mountedTabs.current.add(tabId); setActiveTab(tabId) }
+  const getEventIcon = (t) => ({ PASTE_DETECTED: '[PASTE]', RIGHT_CLICK: '[RC]', KEYBOARD_SHORTCUT: '[KB]', ALT_TAB_DETECTED: '[ALT]', WINDOW_BLUR: '[BLUR]' }[t] || '[!]')
+  const formatEventType = (t) => ({ PASTE_DETECTED: 'Paste Detected', RIGHT_CLICK: 'Right Click Attempted', KEYBOARD_SHORTCUT: 'Keyboard Shortcut Blocked', ALT_TAB_DETECTED: 'Alt+Tab Attempted', WINDOW_BLUR: 'Window Switch Detected' }[t] || t)
+  const getAlertDescription = (e) => { if (e.pastedText) return `Pasted: "${e.pastedText.substring(0, 100)}${e.pastedText.length > 100 ? '...' : ''}"` ; if (e.shortcutKey) return `Shortcut: ${e.shortcutKey} - ${e.details || 'Attempted blocked action'}`; return e.details || 'Proctoring violation detected' }
 
   const renderLiveAnalysis = (data) => {
-    const score = data.score
-    const scorePct = score != null ? Math.round((score / 10) * 100) : null
-    const scoreColor = scorePct != null ? pctColor(scorePct) : 'var(--text-dim)'
+    const score = data.score; const scorePct = score != null ? Math.round((score / 10) * 100) : null; const scoreColor = scorePct != null ? pctColor(scorePct) : '#6B7280'
     return (
-      <div style={{ marginTop: '12px', padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: '3px solid #8B5CF6', borderRadius: '8px' }}>
+      <div style={{ marginTop: '12px', padding: '12px 14px', background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.07)', borderLeft: `3px solid ${scoreColor}`, borderRadius: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Response Analysis</span>
+          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#9CA3AF', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Response Analysis</span>
           {score != null && <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', padding: '2px 8px', borderRadius: '4px', background: `${scoreColor}20`, color: scoreColor, fontWeight: '700' }}>Score {score}/10</span>}
         </div>
-        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)', fontSize: '11px', color: '#A78BFA', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>
-          📊 Full analysis available in Reports tab after interview ends
-        </div>
+        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', color: '#9CA3AF', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>Full analysis available in Reports tab</div>
       </div>
     )
   }
 
   const renderReportsTab = () => {
-    if (loading) return <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>Loading...</div>
-    if (completedSessions.length === 0) return <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-dim)' }}>No completed interviews yet.</div>
-
-    const currentSession = reportSessionId
-      ? completedSessions.find(s => s.id === reportSessionId) || completedSessions[0]
-      : completedSessions[0]
+    if (loading) return <div style={{ textAlign: 'center', padding: '60px', color: '#9CA3AF', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>Loading...</div>
+    if (completedSessions.length === 0) return <div style={{ textAlign: 'center', padding: '60px', color: '#9CA3AF' }}>No completed interviews yet.</div>
+    const currentSession = reportSessionId ? completedSessions.find(s => s.id === reportSessionId) || completedSessions[0] : completedSessions[0]
     if (!currentSession) return null
-
     const allQ = analysisQuestions[currentSession.id] || []
     const aiQ = allQ.filter(q => !q.isRecruiterQuestion)
     const candidate = candidates.find(c => c.id === currentSession.userId)
@@ -472,383 +202,790 @@ export default function RecruiterDashboard() {
     const avgOf = (key) => { const w = aiQ.filter(q => q[key] != null); if (!w.length) return null; return Math.round(w.reduce((s, q) => s + q[key], 0) / w.length) }
     const avgConfidence = avgOf('confidence'), avgAuthenticity = avgOf('authenticity'), avgAccuracy = avgOf('accuracy')
     const suspiciousCount = aiQ.filter(q => q.suspicious).length
-    const totalScore = aiQ.reduce((s, q) => s + (q.score || 0), 0)
-    const maxScore = aiQ.length * 10
+    const totalScore = aiQ.reduce((s, q) => s + (q.score || 0), 0), maxScore = aiQ.length * 10
     const scorePct = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
-
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {completedSessions.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ position: 'relative' }}>
-              <input type="text" placeholder="Search by candidate name or session ID..." value={sessionSearch}
-                onChange={e => setSessionSearch(e.target.value)}
-                style={{ width: '100%', padding: '10px 14px 10px 36px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = '#2563EB'}
-                onBlur={e => e.target.style.borderColor = 'var(--border)'}
-              />
-              <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--text-dim)', pointerEvents: 'none' }}>🔍</span>
-              {sessionSearch && <button onClick={() => setSessionSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '14px', padding: 0 }}>✕</button>}
-            </div>
-            {sessionSearch.trim() !== '' && (
-              <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
-                {(() => {
-                  const q = sessionSearch.toLowerCase().trim()
-                  const filtered = allCompletedSessions.filter(s => {
-                    const c = candidates.find(x => x.id === s.userId)
-                    const name = (c?.fullName || s.userName || '').toLowerCase()
-                    return name.includes(q) || String(s.id).includes(q)
-                  })
-                  if (!filtered.length) return <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>No sessions found for "{sessionSearch}"</div>
-                  return filtered.map((s, idx) => {
-                    const c = candidates.find(x => x.id === s.userId)
-                    const cName = c?.fullName || s.userName || `User #${s.userId}`
-                    const isSelected = s.id === currentSession?.id
-                    return (
-                      <div key={s.id} onClick={() => { loadAnalysisForSession(s.id); setSessionSearch('') }}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none', background: isSelected ? '#2563EB10' : 'transparent', cursor: 'pointer' }}
-                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface3)' }}
-                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', background: isSelected ? '#2563EB30' : 'var(--surface)', color: isSelected ? '#60A5FA' : 'var(--text-dim)', padding: '2px 7px', borderRadius: '5px' }}>#{s.id}</span>
-                          <span style={{ fontSize: '13px', color: isSelected ? '#60A5FA' : 'var(--text)', fontWeight: isSelected ? '600' : '400' }}>{cName}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{s.jobRole?.replace(/_/g, ' ')}</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: s.totalScore > 0 ? '#10B981' : 'var(--text-dim)' }}>
-                            {s.totalQuestions > 0 ? `${Math.round((s.totalScore / (s.totalQuestions * 10)) * 100)}%` : '—'}
-                          </span>
-                        </div>
+      <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+        <div style={{ width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ position: 'relative' }}>
+            <input type="text" placeholder="Search sessions..." value={sessionSearch} onChange={e => setSessionSearch(e.target.value)}
+              className="input-gray" style={{ paddingLeft: '32px', width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '8px 12px 8px 32px' }} />
+            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#6B7280', pointerEvents: 'none' }}>/ /</span>
+            {sessionSearch && <button onClick={() => setSessionSearch('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6B7280', cursor: 'pointer', fontSize: '12px', padding: 0 }}>x</button>}
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', overflow: 'hidden', maxHeight: '600px', overflowY: 'auto' }}>
+            {(() => {
+              const q = sessionSearch.toLowerCase().trim()
+              const list = q ? allCompletedSessions.filter(s => { const c = candidates.find(x => x.id === s.userId); const name = (c?.fullName || s.userName || '').toLowerCase(); return name.includes(q) || String(s.id).includes(q) }) : completedSessions
+              if (!list.length) return <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontSize: '12px' }}>No sessions found</div>
+              return list.map((s, idx) => {
+                const c = candidates.find(x => x.id === s.userId); const cName = c?.fullName || s.userName || `User #${s.userId}`; const isSelected = s.id === currentSession?.id
+                const sp = s.totalQuestions > 0 ? Math.round((s.totalScore / (s.totalQuestions * 10)) * 100) : null
+                return (
+                  <div key={s.id} onClick={() => { loadAnalysisForSession(s.id); setSessionSearch('') }}
+                    style={{ padding: '10px 14px', borderBottom: idx < list.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: isSelected ? 'rgba(255,255,255,0.07)' : 'transparent', cursor: 'pointer', transition: 'background 0.15s', borderLeft: isSelected ? '2px solid rgba(255,255,255,0.4)' : '2px solid transparent' }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '12px', fontWeight: isSelected ? '600' : '400', color: isSelected ? '#F3F4F6' : '#D1D5DB', margin: 0 }}>{cName}</p>
+                        <p style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'var(--font-mono)', margin: '2px 0 0' }}>#{s.id} · {s.jobRole?.replace(/_/g, ' ')}</p>
                       </div>
-                    )
-                  })
-                })()}
-              </div>
-            )}
-            <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              Showing session #{currentSession?.id} — search above to find any session from all {allCompletedSessions.length} completed interviews
+                      {sp != null && <span style={{ fontSize: '11px', fontWeight: '700', color: pctColor(sp), fontFamily: 'var(--font-mono)' }}>{sp}%</span>}
+                    </div>
+                  </div>
+                )
+              })
+            })()}
+          </div>
+          <p style={{ fontSize: '10px', color: '#4B5563', fontFamily: 'var(--font-mono)', margin: 0 }}>{allCompletedSessions.length} total interviews</p>
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div>
+              <p style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: '#6B7280', margin: '0 0 4px' }}>Session #{currentSession.id} · {currentSession.jobRole?.replace(/_/g, ' ')}</p>
+              <h2 style={{ fontSize: '22px', fontWeight: '700', fontFamily: 'var(--font-display)', margin: 0, color: '#F3F4F6', letterSpacing: '-0.02em' }}>{candidateName}</h2>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[{ label: 'Questions', val: allQ.length, raw: true }, { label: 'Score', val: scorePct, suffix: '%' }, ...(hasGroqAnalysis ? [{ label: 'Confidence', val: avgConfidence, suffix: '%' }, { label: 'Auth', val: avgAuthenticity, suffix: '%' }, { label: 'Suspicious', val: suspiciousCount, danger: suspiciousCount > 0, raw: true }] : [])].map(({ label, val, suffix, raw, danger }) => (
+                <div key={label} style={{ textAlign: 'center', padding: '8px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '8px', minWidth: '60px' }}>
+                  <div style={{ fontSize: '9px', color: '#6B7280', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>{label}</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: danger ? '#F87171' : pctColor(raw ? 100 : val), fontFamily: 'var(--font-display)' }}>{raw ? val : (val != null ? `${val}${suffix || ''}` : '—')}</div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
-
-        <div>
-          <p style={{ fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Most recent interview</p>
-          <h2 style={{ fontSize: '20px', fontWeight: '700', fontFamily: 'var(--font-display)', margin: '4px 0' }}>{candidateName}</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>
-            {currentSession.jobRole?.replace(/_/g, ' ')} • Session #{currentSession.id} • {allQ.length} total questions
-          </p>
-        </div>
-
-        {analysisLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>Loading analysis...</div>
-        ) : allQ.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>No questions found for this session.</div>
-        ) : (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-              <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Questions</div>
-                <div style={{ fontSize: '28px', fontWeight: '800', color: '#60A5FA' }}>{allQ.length}</div>
-              </div>
-              <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Score</div>
-                <div style={{ fontSize: '28px', fontWeight: '800', color: pctColor(scorePct) }}>{scorePct}%</div>
-              </div>
-              {hasGroqAnalysis && (
-                <>
-                  {[{ label: 'Confidence', val: avgConfidence }, { label: 'Authenticity', val: avgAuthenticity }, { label: 'Accuracy', val: avgAccuracy }].map(({ label, val }) => (
-                    <div key={label} className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>{label}</div>
-                      <div style={{ fontSize: '28px', fontWeight: '800', color: pctColor(val) }}>{val ?? '—'}%</div>
-                    </div>
-                  ))}
-                  <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>Suspicious</div>
-                    <div style={{ fontSize: '28px', fontWeight: '800', color: suspiciousCount > 0 ? '#EF4444' : '#10B981' }}>{suspiciousCount}</div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {analysisLoading ? <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>Loading analysis...</div> : allQ.length === 0 ? <div style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>No questions found for this session.</div> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {allQ.map((q, idx) => (
-                <div key={idx} className="card" style={{ padding: '20px', borderLeft: q.suspicious ? '4px solid #EF4444' : q.isRecruiterQuestion ? '4px solid #F97316' : '4px solid #10B981' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: q.isRecruiterQuestion ? '#F97316' : 'var(--text-dim)', background: q.isRecruiterQuestion ? '#F9731615' : 'var(--surface2)', padding: '3px 10px', borderRadius: '6px', border: q.isRecruiterQuestion ? '1px solid #F9731640' : 'none' }}>
-                      {q.isRecruiterQuestion ? '🎤 Recruiter Q' : `Q${idx + 1}`}
+                <div key={idx} className="card-gray" style={{ padding: '18px', borderLeft: q.suspicious ? '3px solid #F87171' : q.isRecruiterQuestion ? '3px solid #D1D5DB' : '3px solid rgba(255,255,255,0.2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: q.isRecruiterQuestion ? '#D1D5DB' : '#9CA3AF', background: q.isRecruiterQuestion ? 'rgba(209,213,219,0.1)' : 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '5px' }}>
+                      {q.isRecruiterQuestion ? 'Recruiter Q' : `Q${idx + 1}`}
                     </span>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      {q.suspicious && <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: 'var(--font-mono)', padding: '3px 8px', background: '#EF444415', borderRadius: '6px' }}>⚠️ Suspicious</span>}
-                      {q.score != null && <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(q.score * 10), background: `${pctColor(q.score * 10)}15`, padding: '3px 10px', borderRadius: '6px' }}>Score {q.score}/10</span>}
+                      {q.suspicious && <span style={{ fontSize: '10px', color: '#F87171', fontFamily: 'var(--font-mono)', padding: '2px 8px', background: 'rgba(248,113,113,0.1)', borderRadius: '5px' }}>Suspicious</span>}
+                      {q.score != null && <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(q.score * 10) }}>Score {q.score}/10</span>}
                     </div>
                   </div>
-                  <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.6', marginBottom: '12px', paddingLeft: '10px', borderLeft: '3px solid #2563EB' }}>{q.questionText}</p>
-                  <div style={{ background: 'var(--surface2)', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
-                    <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>Candidate Answer</p>
-                    <p style={{ fontSize: '13px', color: q.userAnswer && q.userAnswer.trim() ? 'var(--text)' : 'var(--text-muted)', margin: 0, lineHeight: '1.6', whiteSpace: 'pre-wrap', fontStyle: q.userAnswer && q.userAnswer.trim() ? 'normal' : 'italic' }}>
-                      {q.userAnswer && q.userAnswer.trim() ? q.userAnswer : '— No answer provided —'}
-                    </p>
+                  <p style={{ fontSize: '13px', color: '#D1D5DB', lineHeight: '1.6', marginBottom: '10px', paddingLeft: '12px', borderLeft: '2px solid rgba(255,255,255,0.1)' }}>{q.questionText}</p>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 12px', marginBottom: '10px' }}>
+                    <p style={{ fontSize: '9px', color: '#6B7280', fontFamily: 'var(--font-mono)', marginBottom: '4px', textTransform: 'uppercase' }}>Answer</p>
+                    <p style={{ fontSize: '12px', color: q.userAnswer?.trim() ? '#D1D5DB' : '#4B5563', margin: 0, lineHeight: '1.6', whiteSpace: 'pre-wrap', fontStyle: q.userAnswer?.trim() ? 'normal' : 'italic' }}>{q.userAnswer?.trim() || '— No answer provided —'}</p>
                   </div>
                   {q.aiFeedback && (
-                    <div style={{ background: '#1e293b', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
-                      <p style={{ fontSize: '10px', color: '#818cf8', fontFamily: 'var(--font-mono)', marginBottom: '6px', textTransform: 'uppercase' }}>AI Feedback</p>
-                      <p style={{ fontSize: '13px', color: '#cbd5e1', margin: 0, lineHeight: '1.6' }}>{q.aiFeedback}</p>
+                    <div style={{ background: 'linear-gradient(135deg, rgba(229,231,235,0.07), rgba(229,231,235,0.02))', borderRadius: '6px', padding: '8px 12px', marginBottom: '10px', borderLeft: '2px solid rgba(229,231,235,0.3)' }}>
+                      <p style={{ fontSize: '9px', color: '#E5E7EB', fontFamily: 'var(--font-mono)', marginBottom: '4px', textTransform: 'uppercase' }}>AI Feedback</p>
+                      <p style={{ fontSize: '12px', color: '#D1D5DB', margin: 0, lineHeight: '1.6' }}>{q.aiFeedback}</p>
                     </div>
                   )}
                   {hasGroqAnalysis && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
                       {[{ label: 'Confidence', value: q.confidence }, { label: 'Authenticity', value: q.authenticity }, { label: 'Accuracy', value: q.accuracy }].map(({ label, value }) => (
                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: '90px' }}>{label}</span>
-                          <div style={{ flex: 1, height: '6px', background: 'var(--surface2)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${value || 0}%`, background: pctColor(value), borderRadius: '3px' }} />
+                          <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: '#6B7280', width: '90px' }}>{label}</span>
+                          <div style={{ flex: 1, height: '5px', background: 'rgba(255,255,255,0.07)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${value || 0}%`, background: `linear-gradient(90deg, ${pctColor(value)}, rgba(255,255,255,0.4))`, borderRadius: '3px', transition: 'width 0.6s ease', boxShadow: `0 0 8px ${pctColor(value)}60` }} />
                           </div>
                           <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: '700', color: pctColor(value), width: '36px', textAlign: 'right' }}>{value ?? 0}%</span>
                         </div>
                       ))}
                     </div>
                   )}
-                  {q.reason && (
-                    <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)', fontSize: '11px', color: '#A78BFA', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>
-                      💬 {q.reason}
-                    </div>
-                  )}
+                  {q.reason && <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', color: '#9CA3AF', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>{q.reason}</div>}
                 </div>
               ))}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', fontFamily: 'var(--font-body)' }}>
-      {showEndPopup && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: '#0D1117', border: '2px solid #EF4444', borderRadius: '16px', padding: '32px 36px', maxWidth: '460px', width: '90%', boxShadow: '0 0 80px rgba(239,68,68,0.4)', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #EF4444, #F97316)', borderRadius: '16px 16px 0 0' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EF444420', border: '2px solid #EF444460', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>🚨</div>
-              <div>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '800', color: '#EF4444', margin: 0 }}>Second Violation Detected</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '2px 0 0' }}>Session #{activeSessionId} — {selectedCandidate?.fullName || 'Candidate'}</p>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+        :root {
+          --bg-dark: #0A0C12;
+          --bg-darker: #06080D;
+          --bg-surface: #0F121A;
+          --bg-surface-light: #151A24;
+          --border: rgba(255,255,255,0.05);
+          --border-light: rgba(255,255,255,0.08);
+          --text: #E8EDF2;
+          --text-dim: #8E9AA8;
+          --text-muted: #4A5568;
+          --font-mono: 'JetBrains Mono', monospace;
+          --font-display: 'Inter', system-ui, sans-serif;
+          --font-body: 'Inter', system-ui, sans-serif;
+          --radius: 12px;
+          --radius-sm: 8px;
+          --radius-lg: 16px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, #root {
+          background: linear-gradient(135deg, #0A0C12 0%, #06080D 100%);
+          color: var(--text);
+          font-family: var(--font-body);
+          min-height: 100vh;
+        }
+
+        .scene-bg {
+          position: fixed; inset: 0; z-index: 0; pointer-events: none;
+          background:
+            radial-gradient(ellipse 60% 40% at 20% 10%, rgba(30,40,60,0.25) 0%, transparent 55%),
+            radial-gradient(ellipse 50% 35% at 85% 80%, rgba(20,30,50,0.2) 0%, transparent 60%);
+        }
+
+        /* ── card-gray with full mouse-tracking glow ── */
+        .card-gray {
+          background: linear-gradient(145deg, var(--bg-surface) 0%, rgba(15,18,26,0.95) 100%);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          isolation: isolate;
+        }
+        .card-gray::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle 200px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
+          opacity: 0;
+          transition: opacity 0.25s ease;
+          pointer-events: none;
+          border-radius: inherit;
+        }
+        .card-gray:hover { border-color: rgba(255,255,255,0.22); transform: translateY(-2px); }
+        .card-gray:hover::before { opacity: 1; }
+
+        /* ── section header ── */
+        .section-header {
+          display: flex; align-items: center; gap: 10px;
+          margin-bottom: 16px; padding-bottom: 10px;
+          border-bottom: 1px solid var(--border);
+        }
+        .section-number {
+          width: 28px; height: 28px;
+          background: rgba(255,255,255,0.06); border-radius: 8px;
+          display: flex; align-items: center; justify-content: center;
+          font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #D1D5DB;
+        }
+        .section-title {
+          font-size: 11px; font-family: var(--font-mono); color: #9CA3AF;
+          letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600;
+        }
+
+        /* ── selected badge ── */
+        .selected-badge {
+          display: flex; align-items: center; gap: 8px;
+          padding: 8px 12px;
+          background: rgba(229,231,235,0.06); border: 1px solid rgba(229,231,235,0.12);
+          border-radius: 30px; margin-top: 12px;
+        }
+        .selected-dot {
+          width: 6px; height: 6px; background: #10B981; border-radius: 50%;
+          box-shadow: 0 0 6px rgba(16,185,129,0.4); animation: pulse-glow 2s infinite;
+        }
+
+        /* ── role buttons — bright hover ── */
+        .role-btn {
+          padding: 10px 16px; border-radius: 10px;
+          border: 1px solid var(--border);
+          background: linear-gradient(135deg, var(--bg-surface-light), rgba(21,26,36,0.9));
+          color: #9CA3AF; font-weight: 500; font-size: 13px;
+          text-align: left; cursor: pointer;
+          transition: all 0.3s ease;
+          position: relative; overflow: hidden; width: 100%;
+        }
+        .role-btn::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: radial-gradient(circle 150px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 40%, transparent 70%);
+          opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+        }
+        .role-btn:hover {
+          border-color: rgba(255,255,255,0.35);
+          color: #FFFFFF;
+          background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
+          transform: translateX(4px);
+        }
+        .role-btn:hover::before { opacity: 1; }
+        .role-btn.selected {
+          border-color: rgba(255,255,255,0.4);
+          background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+          color: #FFFFFF; font-weight: 600;
+        }
+
+        /* ── top nav ── */
+        .top-nav {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 0 36px; height: 64px;
+          background: rgba(10,12,18,0.85);
+          border-bottom: 1px solid var(--border);
+          position: sticky; top: 0; z-index: 100;
+          backdrop-filter: blur(20px);
+        }
+
+        /* ── tab buttons — bright active line ── */
+        .tab-btn {
+          padding: 10px 24px;
+          background: transparent; border: none;
+          color: #6B7280; font-size: 13px; font-weight: 500;
+          letter-spacing: 0.02em; cursor: pointer;
+          margin-bottom: -1px;
+          font-family: var(--font-body);
+          transition: color 0.2s ease;
+          position: relative;
+        }
+        .tab-btn::before, .tab-btn::after {
+          content: '';
+          position: absolute; left: 0; right: 0; height: 2px;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), #FFFFFF, rgba(255,255,255,0.6), transparent);
+          transform: scaleX(0);
+          transition: transform 0.35s ease;
+        }
+        .tab-btn::before { top: 0; transform-origin: left; }
+        .tab-btn::after  { bottom: 0; transform-origin: right; }
+        .tab-btn:hover::before, .tab-btn:hover::after { transform: scaleX(1); }
+        .tab-btn:hover { color: #FFFFFF; }
+        .tab-btn.active { color: #FFFFFF; font-weight: 700; }
+        .tab-btn.active::before, .tab-btn.active::after { transform: scaleX(1); }
+
+        /* ── ctrl buttons ── */
+        .ctrl-btn {
+          padding: 5px 16px; border-radius: 8px;
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          font-family: var(--font-mono); transition: all 0.25s ease;
+        }
+        .ctrl-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .ctrl-btn-pause  { border: 1px solid rgba(209,213,219,0.3); background: rgba(209,213,219,0.07); color: #D1D5DB; }
+        .ctrl-btn-pause:hover:not(:disabled)  { border-color: #D1D5DB; background: rgba(209,213,219,0.18); color: #FFFFFF; box-shadow: 0 0 12px rgba(209,213,219,0.15); }
+        .ctrl-btn-resume { border: 1px solid rgba(229,231,235,0.3); background: rgba(229,231,235,0.07); color: #E5E7EB; }
+        .ctrl-btn-resume:hover:not(:disabled) { border-color: #E5E7EB; background: rgba(229,231,235,0.18); color: #FFFFFF; box-shadow: 0 0 12px rgba(229,231,235,0.15); }
+        .ctrl-btn-stop   { border: 1px solid rgba(248,113,113,0.35); background: rgba(248,113,113,0.09); color: #F87171; }
+        .ctrl-btn-stop:hover:not(:disabled)   { border-color: #F87171; background: rgba(248,113,113,0.2); color: #FFA3A3; box-shadow: 0 0 12px rgba(248,113,113,0.2); }
+
+        /* ── primary button ── */
+        .btn-primary-gray {
+          background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
+          color: #FFFFFF; border: 1px solid rgba(255,255,255,0.18);
+          border-radius: 10px; font-weight: 600; cursor: pointer;
+          font-family: var(--font-body); letter-spacing: 0.02em;
+          transition: all 0.3s ease; position: relative; overflow: hidden;
+        }
+        .btn-primary-gray::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: radial-gradient(circle 150px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 35%, transparent 65%);
+          opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+        }
+        .btn-primary-gray:hover:not(:disabled) {
+          background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.09));
+          border-color: rgba(255,255,255,0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 20px rgba(255,255,255,0.08);
+        }
+        .btn-primary-gray:hover:not(:disabled)::before { opacity: 1; }
+        .btn-primary-gray:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        /* ── ghost button ── */
+        .btn-ghost-gray {
+          background: transparent;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px; color: #9CA3AF; cursor: pointer;
+          font-family: var(--font-body); font-size: 12px;
+          transition: all 0.25s ease;
+        }
+        .btn-ghost-gray:hover {
+          border-color: rgba(255,255,255,0.25);
+          color: #E5E7EB;
+          background: rgba(255,255,255,0.05);
+        }
+
+        /* ── inputs ── */
+        .select-gray, .input-gray {
+          border-radius: 10px; border: 1px solid var(--border);
+          background: rgba(15,18,26,0.9); backdrop-filter: blur(8px);
+          color: var(--text); font-size: 13px; font-family: var(--font-body);
+          outline: none; transition: all 0.3s ease;
+        }
+        .select-gray { width: 100%; padding: 10px 36px 10px 14px; appearance: none; cursor: pointer; }
+        .input-gray  { flex: 1; padding: 10px 14px; }
+        .select-gray:hover, .input-gray:hover { border-color: rgba(255,255,255,0.2); background: rgba(20,24,34,0.95); }
+        .select-gray:focus, .input-gray:focus  { border-color: rgba(255,255,255,0.38); box-shadow: 0 0 0 3px rgba(255,255,255,0.05); background: rgba(25,30,42,0.95); }
+
+        /* ── badges ── */
+        .badge-gray { font-size: 9px; font-weight: 600; font-family: monospace; border-radius: 20px; padding: 2px 10px; letter-spacing: 0.06em; }
+        .badge-live { background: rgba(229,231,235,0.1); color: #E5E7EB; border: 1px solid rgba(229,231,235,0.25); animation: pulse-glow 2s infinite; }
+        .badge-recruiter { background: rgba(255,255,255,0.05); color: #9CA3AF; border: 1px solid rgba(255,255,255,0.08); }
+
+        /* ── logo ── */
+        .logo-text {
+          font-family: var(--font-display); font-weight: 800; font-size: 18px;
+          background: linear-gradient(110deg, #FFFFFF 20%, #8E9AA8 45%, #FFFFFF 70%);
+          background-size: 200% auto;
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          animation: shimmer-premium 4s linear infinite; letter-spacing: -0.02em;
+        }
+        .page-heading {
+          font-family: var(--font-display); font-size: 32px; font-weight: 800;
+          background: linear-gradient(110deg, #FFFFFF 25%, #8E9AA8 50%, #FFFFFF 75%);
+          background-size: 200% auto;
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          animation: shimmer-premium 5s linear infinite; letter-spacing: -0.03em;
+        }
+
+        /* ── typing dots ── */
+        .typing-dot {
+          width: 5px; height: 5px; background: #9CA3AF; border-radius: 50%;
+          animation: typing 1.4s infinite ease-in-out; display: inline-block;
+        }
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        /* ── 3-column live layout ── */
+        .live-layout {
+          display: grid;
+          grid-template-columns: 260px 1fr 290px;
+          gap: 20px;
+          align-items: flex-start;
+        }
+        .live-col { display: flex; flex-direction: column; gap: 14px; }
+
+        /* ── panel ── */
+        .panel {
+          background: linear-gradient(145deg, var(--bg-surface) 0%, rgba(15,18,26,0.95) 100%);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 12px; overflow: hidden;
+          transition: border-color 0.2s, transform 0.2s;
+          position: relative; isolation: isolate;
+        }
+        .panel::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: radial-gradient(circle 180px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
+          opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+        }
+        .panel:hover { border-color: rgba(255,255,255,0.16); }
+        .panel:hover::before { opacity: 1; }
+
+        .panel-header {
+          padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.05);
+          display: flex; align-items: center; gap: 8px;
+        }
+        .panel-step {
+          width: 20px; height: 20px; border-radius: 5px;
+          background: rgba(255,255,255,0.07);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 9px; font-family: var(--font-mono); font-weight: 700; color: #9CA3AF;
+        }
+        .panel-title {
+          font-size: 10px; font-family: var(--font-mono); color: #6B7280;
+          letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600;
+        }
+        .panel-body { padding: 12px 14px; }
+
+        /* ── role pill in panel ── */
+        .role-pill {
+          display: flex; align-items: center; gap: 8px;
+          padding: 9px 12px; border-radius: 9px;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(21,26,36,0.9);
+          color: #9CA3AF; font-weight: 500; font-size: 12px;
+          cursor: pointer; transition: all 0.25s ease;
+          width: 100%; text-align: left;
+          position: relative; overflow: hidden;
+        }
+        .role-pill::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: radial-gradient(circle 120px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 40%, transparent 70%);
+          opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+        }
+        .role-pill:hover { border-color: rgba(255,255,255,0.3); color: #FFFFFF; background: rgba(255,255,255,0.07); transform: translateX(3px); }
+        .role-pill:hover::before { opacity: 1; }
+        .role-pill.selected { border-color: rgba(255,255,255,0.38); background: rgba(255,255,255,0.1); color: #FFFFFF; font-weight: 600; }
+        .role-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); flex-shrink: 0; transition: all 0.25s; }
+        .role-pill.selected .role-pill-dot { background: #10B981; box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+
+        /* ── launch button ── */
+        .btn-launch {
+          width: 100%; padding: 11px;
+          border-radius: 9px; font-size: 13px; font-weight: 600;
+          cursor: pointer; transition: all 0.25s ease;
+          border: 1px solid rgba(255,255,255,0.16);
+          background: rgba(255,255,255,0.08);
+          color: #FFFFFF; font-family: var(--font-body);
+          position: relative; overflow: hidden;
+        }
+        .btn-launch::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: radial-gradient(circle 140px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 40%, transparent 70%);
+          opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+        }
+        .btn-launch:hover:not(:disabled) { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.38); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(255,255,255,0.07); }
+        .btn-launch:hover:not(:disabled)::before { opacity: 1; }
+        .btn-launch:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        /* ── feed item ── */
+        .feed-item {
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(229,231,235,0.08);
+          border-radius: 10px; padding: 12px;
+          transition: border-color 0.2s;
+        }
+        .feed-item.submitted { border-color: rgba(16,185,129,0.15); }
+
+        /* ── alert item ── */
+        .alert-item {
+          padding: 7px 10px;
+          background: rgba(248,113,113,0.04);
+          border: 1px solid rgba(248,113,113,0.08);
+          border-radius: 7px; border-left: 2px solid #F87171;
+        }
+
+        /* ── scrollbar ── */
+        ::-webkit-scrollbar { width: 3px; height: 3px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+
+        /* ── keyframes ── */
+        @keyframes typing   { 0%,60%,100% { transform:translateY(0); opacity:.4; } 30% { transform:translateY(-5px); opacity:1; } }
+        @keyframes pulse-glow { 0%,100% { opacity:.8; } 50% { opacity:1; box-shadow: 0 0 8px rgba(229,231,235,0.35); } }
+        @keyframes blink    { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+        @keyframes fadeUp   { from { opacity:0; transform:translateY(15px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes shimmer-premium { 0% { background-position:200% center; } 100% { background-position:-200% center; } }
+        @keyframes pulse-dot { 0%,100% { opacity:.7; } 50% { opacity:1; } }
+      `}</style>
+
+      <div className="scene-bg" />
+
+      <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+
+        {/* Violation Popup */}
+        {showEndPopup && (
+          <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:'80px', background:'rgba(0,0,0,0.95)', backdropFilter:'blur(12px)' }}>
+            <div style={{ background:'linear-gradient(145deg,#151A24,#0A0C12)', border:'1px solid rgba(248,113,113,0.35)', borderRadius:'20px', padding:'28px 32px', maxWidth:'420px', width:'90%', boxShadow:'0 0 80px rgba(248,113,113,0.12)', position:'relative', animation:'fadeUp 0.3s ease' }}>
+              <div style={{ position:'absolute', top:0, left:0, right:0, height:'3px', background:'linear-gradient(90deg,#F87171 0%,#D1D5DB 60%,#E5E7EB 100%)', borderRadius:'20px 20px 0 0' }} />
+              <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
+                <div style={{ width:'40px', height:'40px', borderRadius:'50%', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.35)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0, color:'#F87171', fontWeight:'700' }}>!</div>
+                <div>
+                  <h3 style={{ fontFamily:'var(--font-display)', fontSize:'16px', fontWeight:'800', color:'#F87171', margin:0 }}>Second Violation Detected</h3>
+                  <p style={{ fontSize:'11px', color:'#6B7280', fontFamily:'var(--font-mono)', margin:'2px 0 0' }}>Session #{activeSessionId} — {selectedCandidate?.fullName || 'Candidate'}</p>
+                </div>
               </div>
-            </div>
-            {latestViolation && (
-              <div style={{ background: '#EF444410', border: '1px solid #EF444430', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px' }}>
-                <p style={{ fontSize: '11px', color: '#F87171', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                  {getEventIcon(latestViolation.eventType)} {formatEventType(latestViolation.eventType)}
-                  {latestViolation.pastedText && ` — "${latestViolation.pastedText.substring(0, 60)}..."`}
-                </p>
-              </div>
-            )}
-            <p style={{ fontSize: '14px', color: 'var(--text)', lineHeight: '1.7', marginBottom: '24px' }}>
-              The candidate has committed a <strong style={{ color: '#EF4444' }}>second violation</strong>. A warning was already sent after the first. Do you want to <strong style={{ color: 'white' }}>terminate this interview</strong>?
-            </p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={handleEndForCheating} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: '#EF4444', color: 'white', border: 'none', fontWeight: '700', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#DC2626'} onMouseLeave={e => e.currentTarget.style.background = '#EF4444'}>
-                Yes, End Interview
-              </button>
-              <button onClick={() => { setShowEndPopup(false); setViolationCount(1) }} style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', fontWeight: '600', fontSize: '14px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}>
-                No, Continue
-              </button>
-            </div>
-            <p style={{ textAlign: 'center', marginTop: '14px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Choosing "No" will reset to 1 warning.</p>
-          </div>
-        </div>
-      )}
-
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 32px', height: '64px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '32px', height: '32px', background: 'linear-gradient(135deg, #2563EB, #06B6D4)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: 'white' }}>AI</div>
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '17px' }}>InterviewAI</span>
-          <span className="badge badge-orange" style={{ marginLeft: '8px' }}>Recruiter</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-dim)' }}>{user?.fullName}</span>
-          <button className="btn-ghost" onClick={logout} style={{ padding: '8px 18px', fontSize: '14px' }}>Sign out</button>
-        </div>
-      </nav>
-
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 32px' }}>
-        <div style={{ marginBottom: '32px', animation: 'fadeUp 0.4s ease forwards' }}>
-          <p style={{ fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--orange)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Recruiter Portal</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '36px', fontWeight: '800' }}>Interview Control Center</h1>
-        </div>
-
-        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border)', marginBottom: '32px' }}>
-          {[{ id: 'live', label: 'Live Interview' }, { id: 'reports', label: 'Analysis Reports' }, { id: 'resume', label: 'Resume Screening' }, { id: 'candidates', label: 'Candidates' }].map(tab => (
-            <button key={tab.id} onClick={() => handleTabClick(tab.id)} style={{ padding: '10px 20px', background: 'transparent', border: 'none', borderBottom: activeTab === tab.id ? '2px solid #2563EB' : '2px solid transparent', color: activeTab === tab.id ? '#60A5FA' : '#334155', fontSize: '14px', fontWeight: activeTab === tab.id ? 700 : 400, cursor: 'pointer', marginBottom: '-1px', fontFamily: activeTab === tab.id ? 'var(--font-display)' : 'var(--font-body)', transition: 'all 0.15s ease' }}>{tab.label}</button>
-          ))}
-        </div>
-
-        <div style={{ display: activeTab === 'live' ? 'grid' : 'none', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="card" style={{ padding: '24px' }}>
-              <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>01 — Select Candidate</p>
-              {loading ? <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Loading candidates...</p> : (
-                <div style={{ position: 'relative' }}>
-                  <select value={selectedCandidate?.id || ''} onChange={(e) => { const found = candidates.find(c => String(c.id) === e.target.value); setSelectedCandidate(found || null); if (found) sessionStorage.setItem('recruiter_selected_candidate', JSON.stringify(found)); else sessionStorage.removeItem('recruiter_selected_candidate') }}
-                    style={{ width: '100%', padding: '12px 40px 12px 14px', borderRadius: 'var(--radius)', border: `1px solid ${selectedCandidate ? '#2563EB60' : 'var(--border)'}`, background: 'var(--surface2)', color: selectedCandidate ? 'var(--text)' : 'var(--text-dim)', fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none', cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}>
-                    <option value="">— Select a candidate —</option>
-                    {candidates.map(c => <option key={c.id} value={c.id}>{c.fullName} ({c.email})</option>)}
-                  </select>
-                  <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-dim)' }}>▾</div>
+              {latestViolation && (
+                <div style={{ background:'rgba(248,113,113,0.06)', border:'1px solid rgba(248,113,113,0.12)', borderRadius:'8px', padding:'8px 12px', marginBottom:'14px' }}>
+                  <p style={{ fontSize:'10px', color:'#F87171', fontFamily:'var(--font-mono)', margin:0 }}>{formatEventType(latestViolation.eventType)}{latestViolation.pastedText && ` — "${latestViolation.pastedText.substring(0,50)}..."`}</p>
                 </div>
               )}
-            </div>
-
-            <div className="card" style={{ padding: '24px' }}>
-              <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>02 — Job Role</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {JOB_ROLES.map(r => (
-                  <button key={r} onClick={() => setSelectedRole(r)} style={{ padding: '12px 16px', borderRadius: 'var(--radius)', border: `1px solid ${selectedRole === r ? '#2563EB60' : 'var(--border)'}`, background: selectedRole === r ? '#2563EB10' : 'var(--surface2)', color: selectedRole === r ? '#60A5FA' : 'var(--text-dim)', fontWeight: selectedRole === r ? '600' : '400', fontSize: '14px', textAlign: 'left', cursor: 'pointer' }}>
-                    {r.replace(/_/g, ' ')}
-                  </button>
-                ))}
+              <p style={{ fontSize:'13px', color:'#D1D5DB', lineHeight:'1.6', marginBottom:'20px' }}>The candidate has committed a <strong style={{ color:'#F87171' }}>second violation</strong>. Do you want to <strong style={{ color:'#FFFFFF' }}>terminate this interview</strong>?</p>
+              <div style={{ display:'flex', gap:'10px' }}>
+                <button onClick={handleEndForCheating} className="ctrl-btn ctrl-btn-stop" style={{ flex:1, padding:'10px', borderRadius:'10px', fontSize:'13px', fontWeight:'700' }}>Yes, End</button>
+                <button onClick={() => { setShowEndPopup(false); setViolationCount(1) }} className="btn-ghost-gray" style={{ flex:1, padding:'10px', borderRadius:'10px', fontSize:'13px', fontWeight:'600' }}>No, Continue</button>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="card" style={{ padding: '24px' }}>
-              <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>03 — Launch</p>
-              {selectedCandidate && <div style={{ padding: '12px 16px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: '16px', fontSize: '13px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{selectedCandidate.fullName} / {selectedRole.replace(/_/g, ' ')}</div>}
-              <button className="btn-primary" onClick={handleStart} disabled={starting || Boolean(activeSessionId)} style={{ width: '100%', padding: '14px', fontSize: '15px' }}>
-                {starting ? 'Starting...' : activeSessionId ? 'Interview Running' : 'Launch Interview'}
-              </button>
-              {message && <p style={{ marginTop: '12px', fontSize: '13px', color: messageType === 'success' ? '#34D399' : '#F87171', fontFamily: 'var(--font-mono)' }}>{message}</p>}
-            </div>
+        {/* Navbar */}
+        <nav className="top-nav">
+          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+            <div style={{ width:'32px', height:'32px', background:'linear-gradient(135deg,#FFFFFF,#8E9AA8)', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'var(--font-display)', fontWeight:'900', fontSize:'11px', color:'#0A0C12', boxShadow:'0 0 12px rgba(255,255,255,0.2)', flexShrink:0 }}>AI</div>
+            <span className="logo-text">InterviewAI</span>
+            <span className="badge-gray badge-recruiter" style={{ marginLeft:'4px' }}>Recruiter</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+            <span style={{ fontSize:'12px', color:'#8E9AA8' }}>{user?.fullName}</span>
+            <button className="btn-ghost-gray" onClick={logout} style={{ padding:'6px 16px', fontSize:'12px' }}>Sign out</button>
+          </div>
+        </nav>
 
-            {proctoringAlerts.length > 0 && (
-              <div className="card" style={{ padding: '24px', background: '#1a0a0a', borderColor: '#7F1D1D' }}>
-                <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#EF4444', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '16px' }}>🚨 Security Alerts ({proctoringAlerts.length})</p>
-                <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {proctoringAlerts.map((alert, idx) => (
-                    <div key={idx} style={{ padding: '12px', background: '#1f0a0a', border: '1px solid #7F1D1D', borderRadius: '8px', borderLeft: `4px solid ${alert.eventType === 'PASTE_DETECTED' ? '#EF4444' : alert.eventType === 'ALT_TAB_DETECTED' ? '#F97316' : '#EC4899'}` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ fontWeight: '600', fontSize: '13px', color: '#EF4444' }}>{getEventIcon(alert.eventType)} {formatEventType(alert.eventType)}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{new Date(alert.timestamp).toLocaleTimeString()}</span>
+        {/* Main Content */}
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 32px' }}>
+
+          {/* Header */}
+          <div style={{ marginBottom: '28px', animation: 'fadeUp 0.4s ease forwards' }}>
+            <p style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'rgba(220,222,230,0.5)', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: '8px' }}>Recruiter Portal</p>
+            <h1 className="page-heading">Interview Control Center</h1>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display:'flex', gap:'2px', borderBottom:'1px solid var(--border)', marginBottom:'28px' }}>
+            {[
+              { id:'live',       label:'Live Interview'    },
+              { id:'reports',    label:'Analysis Reports'  },
+              { id:'resume',     label:'Resume Screening'  },
+              { id:'candidates', label:'Candidates'        },
+            ].map(tab => (
+              <button key={tab.id} className={`tab-btn${activeTab===tab.id?' active':''}`} onClick={() => handleTabClick(tab.id)}>{tab.label}</button>
+            ))}
+          </div>
+
+          {/* ── LIVE TAB — 3-column ── */}
+          <div style={{ display: activeTab==='live' ? 'block' : 'none' }}>
+            <div className="live-layout">
+
+              {/* Col 1 — Setup panels */}
+              <div className="live-col">
+
+                {/* Candidate */}
+                <div className="panel"
+                  onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+                  <div className="panel-header">
+                    <div className="panel-step">1</div>
+                    <span className="panel-title">Select Candidate</span>
+                  </div>
+                  <div className="panel-body">
+                    {loading ? <p style={{ color:'#8E9AA8', fontSize:'13px' }}>Loading...</p> : (
+                      <div style={{ position:'relative' }}>
+                        <select className="select-gray" value={selectedCandidate?.id || ''} onChange={e => { const found=candidates.find(c=>String(c.id)===e.target.value); setSelectedCandidate(found||null); if(found) sessionStorage.setItem('recruiter_selected_candidate',JSON.stringify(found)); else sessionStorage.removeItem('recruiter_selected_candidate') }}>
+                          <option value="">Select candidate</option>
+                          {candidates.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                        </select>
+                        <div style={{ position:'absolute', right:'12px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'#8E9AA8', fontSize:'10px' }}>▼</div>
                       </div>
-                      <p style={{ fontSize: '12px', color: '#FCA5A5', margin: '4px 0' }}>{getAlertDescription(alert)}</p>
-                    </div>
-                  ))}
+                    )}
+                    {selectedCandidate && (
+                      <div className="selected-badge">
+                        <div className="selected-dot" />
+                        <span style={{ fontSize:'12px', fontWeight:'500' }}>{selectedCandidate.fullName}</span>
+                        <span style={{ fontSize:'10px', color:'#8E9AA8', fontFamily:'var(--font-mono)', marginLeft:'auto' }}>ID: {selectedCandidate.id}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <AdminCameraView userId={selectedCandidate?.id} />
-            <div className="card" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <p style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>Live Feed</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {activeSessionId && (
-                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: wsConnected ? '#10B981' : '#F97316', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: wsConnected ? '#10B981' : '#F97316', animation: wsConnected ? 'pulse-glow 2s infinite' : 'blink 1s infinite' }} />
-                      {wsConnected ? 'WS Ready' : 'Connecting...'}
-                    </span>
-                  )}
-                  {activeSessionId && (
-                    <>
-                      <button onClick={handlePauseResume} disabled={isStopped || !wsConnected} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: (isStopped || !wsConnected) ? 'not-allowed' : 'pointer', border: isPaused ? '1px solid #10B98160' : '1px solid #F9731660', background: isPaused ? '#10B98115' : '#F9731615', color: isPaused ? '#10B981' : '#F97316', fontFamily: 'var(--font-mono)', opacity: (isStopped || !wsConnected) ? 0.4 : 1 }}>
-                        {isPaused ? 'Resume' : 'Pause'}
+                {/* Job Role */}
+                <div className="panel"
+                  onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+                  <div className="panel-header">
+                    <div className="panel-step">2</div>
+                    <span className="panel-title">Job Role</span>
+                  </div>
+                  <div className="panel-body" style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                    {JOB_ROLES.map(r => (
+                      <button key={r} className={`role-pill${selectedRole===r?' selected':''}`} onClick={() => setSelectedRole(r)}
+                        onMouseMove={e => { const rect=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-rect.left)/rect.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-rect.top)/rect.height)*100}%`) }}>
+                        <span className="role-pill-dot" />
+                        {r.replace(/_/g,' ')}
                       </button>
-                      {!isStopped
-                        ? <button onClick={handleStop} style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>End Interview</button>
-                        : <span style={{ padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', border: '1px solid #EF444460', background: '#EF444415', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>Stopped</span>
-                      }
-                      <span className="badge badge-green" style={{ animation: 'pulse-glow 2s infinite' }}>Live #{activeSessionId}</span>
-                    </>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {isStopped && activeSessionId && (
-                <div style={{ padding: '10px 16px', background: '#EF444415', border: '1px solid #EF444440', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '13px', color: '#EF4444', fontWeight: '600', margin: 0 }}>Interview Stopped</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: 0 }}>Full analysis report available in Reports tab.</p>
+                {/* Launch */}
+                <div className="panel"
+                  onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+                  <div className="panel-header">
+                    <div className="panel-step">3</div>
+                    <span className="panel-title">Launch Session</span>
+                  </div>
+                  <div className="panel-body">
+                    {selectedCandidate && (
+                      <div style={{ padding:'8px 12px', background:'rgba(229,231,235,0.04)', border:'1px solid rgba(229,231,235,0.1)', borderRadius:'8px', marginBottom:'12px' }}>
+                        <p style={{ fontSize:'12px', fontWeight:'500', color:'#E5E7EB', margin:0 }}>{selectedCandidate.fullName}</p>
+                        <p style={{ fontSize:'10px', color:'#8E9AA8', fontFamily:'var(--font-mono)', margin:'2px 0 0' }}>{selectedRole.replace(/_/g,' ')}</p>
+                      </div>
+                    )}
+                    <button className="btn-launch" onClick={handleStart} disabled={starting||Boolean(activeSessionId)}
+                      onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+                      {starting ? 'Starting...' : activeSessionId ? 'Interview Active' : 'Launch Interview'}
+                    </button>
+                    {message && <p style={{ marginTop:'10px', fontSize:'11px', color:messageType==='success'?'#10B981':'#F87171', fontFamily:'var(--font-mono)', textAlign:'center' }}>{message}</p>}
+                  </div>
                 </div>
-              )}
-              {activeSessionId && !wsConnected && !isStopped && (
-                <div style={{ padding: '10px 16px', background: '#2563EB10', border: '1px solid #2563EB40', borderRadius: 'var(--radius)', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '12px', color: '#60A5FA', fontFamily: 'var(--font-mono)', margin: 0 }}>Connecting to WebSocket...</p>
-                </div>
-              )}
 
-              <div style={{ flex: 1 }}>
-                {!activeSessionId ? (
-                  <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', opacity: 0.4 }}>
-                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" color="#64748B"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                      <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>No active session</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Select a candidate to begin</span>
+                {/* Security Alerts */}
+                {proctoringAlerts.length > 0 && (
+                  <div className="panel" style={{ borderColor:'rgba(248,113,113,0.15)' }}
+                    onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+                    <div className="panel-header">
+                      <div className="panel-step" style={{ color:'#F87171', background:'rgba(248,113,113,0.1)' }}>!</div>
+                      <span className="panel-title" style={{ color:'#F87171' }}>Security Alerts ({proctoringAlerts.length})</span>
                     </div>
-                  </div>
-                ) : Object.keys(liveFeed).length === 0 ? (
-                  <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>{wsConnected ? 'Waiting for candidate...' : 'Setting up live feed...'}</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto' }}>
-                    {Object.entries(liveFeed)
-                      .sort(([a], [b]) => { const an = isNaN(Number(a)) ? 9999 : Number(a); const bn = isNaN(Number(b)) ? 9999 : Number(b); return an - bn })
-                      .map(([qNum, data]) => (
-                        <div key={qNum} style={{ background: 'var(--surface2)', border: `1px solid ${data.status === 'SUBMITTED' ? '#10B98140' : '#F9731640'}`, borderRadius: 'var(--radius)', padding: '16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>{qNum === 'R' ? 'Recruiter Q' : `Q${qNum}`}</span>
-                            <span className={`badge ${data.status === 'SUBMITTED' ? 'badge-green' : 'badge-orange'}`}>{data.status === 'SUBMITTED' ? 'Submitted' : 'Typing'}</span>
+                    <div className="panel-body" style={{ display:'flex', flexDirection:'column', gap:'5px', maxHeight:'180px', overflowY:'auto' }}>
+                      {proctoringAlerts.slice(0,5).map((alert, idx) => (
+                        <div key={idx} className="alert-item">
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'2px' }}>
+                            <span style={{ fontSize:'9px', fontWeight:'700', color:'#F87171', fontFamily:'var(--font-mono)' }}>{formatEventType(alert.eventType)}</span>
+                            <span style={{ fontSize:'8px', color:'#4B5563', fontFamily:'var(--font-mono)' }}>{new Date(alert.timestamp).toLocaleTimeString()}</span>
                           </div>
-                          <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '10px' }}>{data.questionText}</p>
-                          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--text)', minHeight: '40px', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-                            {data.currentAnswer || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                            {data.status === 'TYPING' && <span style={{ display: 'inline-block', width: '2px', height: '14px', background: 'var(--cyan)', marginLeft: '2px', animation: 'blink 1s infinite', verticalAlign: 'middle' }} />}
-                          </div>
-                          {data.status === 'SUBMITTED' && renderLiveAnalysis(data)}
+                          <p style={{ fontSize:'9px', color:'#D1D5DB', margin:0 }}>{getAlertDescription(alert)}</p>
                         </div>
                       ))}
+                    </div>
                   </div>
                 )}
               </div>
 
-              {activeSessionId && !isStopped && (
-                <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {isPaused && <p style={{ fontSize: '12px', color: '#F97316', fontFamily: 'var(--font-mono)', margin: 0 }}>Paused — ask your question below.</p>}
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <input value={recruiterQuestion} onChange={e => setRecruiterQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleRecruiterQuestion() }}
-                      placeholder={isPaused ? 'Ask your question now...' : 'Pause first, then ask a question...'} disabled={!isPaused}
-                      style={{ flex: 1, padding: '12px 14px', borderRadius: 'var(--radius)', border: `1px solid ${isPaused ? '#F9731660' : 'var(--border)'}`, background: 'var(--surface2)', color: 'var(--text)', fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none', opacity: isPaused ? 1 : 0.5 }}
-                    />
-                    <button onClick={handleRecruiterQuestion} disabled={!recruiterQuestion.trim() || !isPaused} className="btn-primary" style={{ padding: '12px 20px', fontSize: '14px', flexShrink: 0, opacity: !recruiterQuestion.trim() || !isPaused ? 0.5 : 1 }}>Ask</button>
+              {/* Col 2 — Live Feed */}
+              <div className="live-col">
+                <div className="panel" style={{ flex:1 }}
+                  onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+
+                  <div className="panel-header" style={{ justifyContent:'space-between' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:activeSessionId&&wsConnected?'#10B981':'#4B5563', display:'inline-block', ...(activeSessionId&&wsConnected?{animation:'pulse-dot 2s infinite'}:{}) }} />
+                      <span className="panel-title">Live Response Feed</span>
+                    </div>
+                    {activeSessionId && (
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                        <span style={{ fontSize:'10px', fontFamily:'var(--font-mono)', color:wsConnected?'#E5E7EB':'#F59E0B', display:'flex', alignItems:'center', gap:'4px' }}>
+                          <span style={{ display:'inline-block', width:'5px', height:'5px', borderRadius:'50%', background:wsConnected?'#10B981':'#F59E0B', animation:'pulse-dot 2s infinite' }} />
+                          {wsConnected?'Live':'Connecting'}
+                        </span>
+                        <button onClick={handlePauseResume} disabled={isStopped||!wsConnected} className={`ctrl-btn ${isPaused?'ctrl-btn-resume':'ctrl-btn-pause'}`}>{isPaused?'Resume':'Pause'}</button>
+                        {!isStopped
+                          ? <button onClick={handleStop} className="ctrl-btn ctrl-btn-stop">End</button>
+                          : <span className="ctrl-btn ctrl-btn-stop" style={{ cursor:'default', opacity:0.6 }}>Ended</span>}
+                        <span className="badge-gray badge-live">#{activeSessionId}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="panel-body" style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                    {isStopped && activeSessionId && (
+                      <div style={{ padding:'8px 12px', background:'rgba(248,113,113,0.06)', border:'1px solid rgba(248,113,113,0.12)', borderRadius:'8px', marginBottom:'12px' }}>
+                        <p style={{ fontSize:'12px', color:'#F87171', fontWeight:'500', margin:0 }}>Interview Stopped</p>
+                        <p style={{ fontSize:'10px', color:'#6B7280', fontFamily:'var(--font-mono)', margin:'2px 0 0' }}>Analysis available in Reports tab</p>
+                      </div>
+                    )}
+                    {activeSessionId && !wsConnected && !isStopped && (
+                      <div style={{ padding:'8px 12px', background:'rgba(229,231,235,0.04)', border:'1px solid rgba(229,231,235,0.1)', borderRadius:'8px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
+                        <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+                        <span style={{ fontSize:'10px', color:'#D1D5DB', fontFamily:'var(--font-mono)' }}>Connecting...</span>
+                      </div>
+                    )}
+
+                    <div style={{ minHeight:'280px' }}>
+                      {!activeSessionId ? (
+                        <div style={{ minHeight:'240px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center' }}>
+                          <div style={{ width:'48px', height:'48px', background:'rgba(255,255,255,0.03)', borderRadius:'24px', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'12px' }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E9AA8" strokeWidth="1.2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                          </div>
+                          <p style={{ color:'#8E9AA8', fontSize:'13px', marginBottom:'4px' }}>No Active Session</p>
+                          <p style={{ fontSize:'10px', color:'#6B7280', fontFamily:'var(--font-mono)' }}>Select candidate &amp; launch</p>
+                        </div>
+                      ) : Object.keys(liveFeed).length === 0 ? (
+                        <div style={{ minHeight:'240px', display:'flex', alignItems:'center', justifyContent:'center', gap:'4px' }}>
+                          <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+                          <span style={{ marginLeft:'6px', color:'#8E9AA8', fontSize:'12px' }}>Waiting for response...</span>
+                        </div>
+                      ) : (
+                        <div style={{ display:'flex', flexDirection:'column', gap:'12px', maxHeight:'480px', overflowY:'auto', paddingRight:'4px' }}>
+                          {Object.entries(liveFeed)
+                            .sort(([a],[b]) => { const an=isNaN(Number(a))?9999:Number(a); const bn=isNaN(Number(b))?9999:Number(b); return an-bn })
+                            .map(([qNum,data]) => (
+                              <div key={qNum} className={`feed-item${data.status==='SUBMITTED'?' submitted':''}`}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                                  <span style={{ fontFamily:'var(--font-mono)', fontSize:'9px', background:data.status==='SUBMITTED'?'rgba(16,185,129,0.12)':'rgba(229,231,235,0.06)', color:data.status==='SUBMITTED'?'#10B981':'#D1D5DB', padding:'2px 8px', borderRadius:'16px', fontWeight:'600' }}>
+                                    {qNum==='R'?'Recruiter':`Q${qNum}`}
+                                  </span>
+                                  <span style={{ fontSize:'9px', fontFamily:'var(--font-mono)', color:data.status==='SUBMITTED'?'#10B981':'#6B7280' }}>{data.status}</span>
+                                </div>
+                                <p style={{ fontSize:'11px', color:'#D1D5DB', marginBottom:'8px', lineHeight:'1.5' }}>{data.questionText}</p>
+                                <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 10px', fontSize:'11px', fontFamily:'var(--font-mono)', color:'#D1D5DB', whiteSpace:'pre-wrap', lineHeight:'1.5' }}>
+                                  {data.currentAnswer || <span style={{ color:'#4B5563', fontStyle:'italic' }}>No answer yet</span>}
+                                  {data.status==='TYPING' && <span style={{ display:'inline-block', width:'2px', height:'10px', background:'#E5E7EB', marginLeft:'2px', animation:'blink 1s infinite', verticalAlign:'middle' }} />}
+                                </div>
+                                {data.status==='SUBMITTED' && (() => {
+                                  const score=data.score; const scorePct=score!=null?Math.round((score/10)*100):null; const scoreColor=scorePct!=null?pctColor(scorePct):'#6B7280'
+                                  return (
+                                    <div style={{ marginTop:'12px', padding:'12px 14px', background:'linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))', border:'1px solid rgba(255,255,255,0.07)', borderLeft:`3px solid ${scoreColor}`, borderRadius:'8px' }}>
+                                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+                                        <span style={{ fontSize:'10px', fontFamily:'var(--font-mono)', color:'#9CA3AF', letterSpacing:'0.1em', textTransform:'uppercase' }}>Response Analysis</span>
+                                        {score!=null && <span style={{ fontSize:'10px', fontFamily:'var(--font-mono)', padding:'2px 8px', borderRadius:'4px', background:`${scoreColor}20`, color:scoreColor, fontWeight:'700' }}>Score {score}/10</span>}
+                                      </div>
+                                      <div style={{ marginTop:'8px', paddingTop:'8px', borderTop:'1px solid rgba(255,255,255,0.06)', fontSize:'11px', color:'#9CA3AF', fontFamily:'var(--font-mono)', fontStyle:'italic' }}>Full analysis available in Reports tab</div>
+                                    </div>
+                                  )
+                                })()}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Recruiter Question */}
+                    {activeSessionId && !isStopped && (
+                      <div style={{ marginTop:'14px', borderTop:'1px solid var(--border)', paddingTop:'12px' }}>
+                        <p style={{ fontSize:'10px', color:isPaused?'#D1D5DB':'#6B7280', fontFamily:'var(--font-mono)', marginBottom:'8px' }}>
+                          {isPaused ? 'Paused — ask a question:' : 'Pause the interview to ask a question'}
+                        </p>
+                        <div style={{ display:'flex', gap:'10px' }}>
+                          <input value={recruiterQuestion} onChange={e=>setRecruiterQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleRecruiterQuestion()}}
+                            placeholder={isPaused?'Type your question...':'Pause first to ask a question'} disabled={!isPaused}
+                            className="input-gray" style={{ borderColor:isPaused?'rgba(229,231,235,0.25)':'var(--border)', opacity:isPaused?1:0.5 }} />
+                          <button className="btn-primary-gray" onClick={handleRecruiterQuestion} disabled={!recruiterQuestion.trim()||!isPaused}
+                            style={{ padding:'0 20px', fontSize:'12px', flexShrink:0, opacity:(!recruiterQuestion.trim()||!isPaused)?0.4:1, whiteSpace:'nowrap' }}
+                            onMouseMove={e=>{const r=e.currentTarget.getBoundingClientRect();e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`);e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`)}}>
+                            Send
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Col 3 — Camera */}
+              <div className="live-col">
+                <AdminCameraView userId={selectedCandidate?.id} />
+
+                {/* Active session stats */}
+                {activeSessionId && (
+                  <div className="panel"
+                    onMouseMove={e => { const r=e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mouse-x',`${((e.clientX-r.left)/r.width)*100}%`); e.currentTarget.style.setProperty('--mouse-y',`${((e.clientY-r.top)/r.height)*100}%`) }}>
+                    <div className="panel-header">
+                      <span className="panel-title">Session Stats</span>
+                    </div>
+                    <div className="panel-body" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                      {[
+                        { label:'Questions', val: Object.keys(liveFeed).filter(k=>k!=='R').length },
+                        { label:'Submitted', val: Object.values(liveFeed).filter(d=>d.status==='SUBMITTED').length },
+                        { label:'Violations', val: violationCount, danger: violationCount > 0 },
+                        { label:'Recruiter Qs', val: liveFeed['R'] ? 1 : 0 },
+                      ].map(({label,val,danger}) => (
+                        <div key={label} style={{ textAlign:'center', padding:'8px 6px', background:'rgba(255,255,255,0.03)', borderRadius:'7px' }}>
+                          <div style={{ fontSize:'8px', color:'#6B7280', fontFamily:'var(--font-mono)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'4px' }}>{label}</div>
+                          <div style={{ fontSize:'18px', fontWeight:'800', color:danger?'#F87171':'#E5E7EB', fontFamily:'var(--font-display)' }}>{val}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
-        </div>
 
-        <div style={{ display: activeTab === 'reports' ? 'block' : 'none' }}>
-          {mountedTabs.current.has('reports') && renderReportsTab()}
-        </div>
-        <div style={{ display: activeTab === 'resume' ? 'block' : 'none' }}>
-          {mountedTabs.current.has('resume') && (
-            <ResumeScreeningTab candidates={candidates} selectedCandidate={rsCandidate} setSelectedCandidate={setRsCandidate} resumeFile={rsResumeFile} setResumeFile={setRsResumeFile} resumeText={rsResumeText} setResumeText={setRsResumeText} messages={rsMessages} setMessages={setRsMessages} generated={rsGenerated} setGenerated={setRsGenerated} conversationRef={rsConversationRef} />
-          )}
-        </div>
-        <div style={{ display: activeTab === 'candidates' ? 'block' : 'none' }}>
-          {mountedTabs.current.has('candidates') && <CandidatesTab candidates={candidates} sessions={allCompletedSessions} loading={loading} />}
+          {/* Reports Tab */}
+          <div style={{ display: activeTab==='reports'?'block':'none' }}>
+            {mountedTabs.current.has('reports') && renderReportsTab()}
+          </div>
+
+          {/* Resume Tab */}
+          <div style={{ display: activeTab==='resume'?'block':'none' }}>
+            {mountedTabs.current.has('resume') && <ResumeScreeningTab candidates={candidates} selectedCandidate={rsCandidate} setSelectedCandidate={setRsCandidate} resumeFile={rsResumeFile} setResumeFile={setRsResumeFile} resumeText={rsResumeText} setResumeText={setRsResumeText} messages={rsMessages} setMessages={setRsMessages} generated={rsGenerated} setGenerated={setRsGenerated} conversationRef={rsConversationRef} />}
+          </div>
+
+          {/* Candidates Tab */}
+          <div style={{ display: activeTab==='candidates'?'block':'none' }}>
+            {mountedTabs.current.has('candidates') && <CandidatesTab candidates={candidates} sessions={allCompletedSessions} loading={loading} />}
+          </div>
+
         </div>
       </div>
-
-      <style>{`
-        @keyframes scanline { 0% { top: 0 } 100% { top: 100% } }
-        @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .badge-red { background: #EF444415; color: #EF4444; border: 1px solid #EF444460; border-radius: 12px; padding: 2px 8px; font-size: 10px; font-weight: 600; font-family: monospace; }
-      `}</style>
-    </div>
+    </>
   )
 }

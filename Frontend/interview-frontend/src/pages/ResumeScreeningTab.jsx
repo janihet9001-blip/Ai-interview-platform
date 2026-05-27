@@ -73,14 +73,14 @@ export default function ResumeScreeningTab({
     conversationRef.current = []
     setResumeLoading(true)
     
-const token = sessionStorage.getItem('token')
-const controller = new AbortController()
-abortControllerRef.current = controller
+    const token = sessionStorage.getItem('token')
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
-fetch(`/api/users/${selectedCandidate.id}/resume`, {
-  headers: { Authorization: `Bearer ${token}` },
-  signal: controller.signal
-})
+    fetch(`/api/users/${selectedCandidate.id}/resume`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal
+    })
       .then(res => {
         if (res.status === 404) {
           setNoResume(true)
@@ -133,7 +133,7 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
     if (!apiKey) throw new Error('Missing VITE_GROQ_API_KEY in .env')
     
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
     
     try {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -261,7 +261,18 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* Candidate list */}
-        <div className="card" style={{ padding: '20px' }}>
+        <div 
+          className="card-gray" 
+          id="candidateListCard"
+          onMouseMove={(e) => {
+            const el = document.getElementById('candidateListCard')
+            if(!el) return
+            const rect = el.getBoundingClientRect()
+            el.style.setProperty('--mouse-x', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+            el.style.setProperty('--mouse-y', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+          }}
+          style={{ padding: '20px' }}
+        >
           <p style={{
             fontSize: '12px', fontFamily: 'var(--font-mono)',
             color: 'var(--text-dim)', letterSpacing: '0.08em',
@@ -279,8 +290,8 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                   onClick={() => setSelectedCandidate(c)}
                   onMouseEnter={e => {
                     if (selectedCandidate?.id !== c.id) {
-                      e.currentTarget.style.border = '1px solid #2563EB60'
-                      e.currentTarget.style.background = '#2563EB08'
+                      e.currentTarget.style.border = '1px solid rgba(255,255,255,0.25)'
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
                       e.currentTarget.style.transform = 'translateY(-1px)'
                     }
                   }}
@@ -294,14 +305,14 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                   style={{
                     padding: '14px',
                     borderRadius: 'var(--radius)',
-                    border: `1px solid ${selectedCandidate?.id === c.id ? '#2563EB' : 'var(--border)'}`,
-                    background: selectedCandidate?.id === c.id ? '#2563EB15' : 'var(--surface2)',
+                    border: `1px solid ${selectedCandidate?.id === c.id ? 'rgba(255,255,255,0.35)' : 'var(--border)'}`,
+                    background: selectedCandidate?.id === c.id ? 'rgba(255,255,255,0.08)' : 'var(--surface2)',
                     color: 'var(--text)',
                     cursor: 'pointer',
                     textAlign: 'left',
                     width: '100%',
-                    transition: 'all 0.2s ease',
-                    boxShadow: selectedCandidate?.id === c.id ? '0 0 0 1px #2563EB40, 0 0 12px #2563EB15' : 'none',
+                    transition: 'all 0.3s ease',
+                    boxShadow: selectedCandidate?.id === c.id ? '0 0 20px rgba(255,255,255,0.05)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
@@ -310,17 +321,18 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                   <div style={{
                     width: '34px', height: '34px', borderRadius: '50%',
                     background: selectedCandidate?.id === c.id
-                      ? 'linear-gradient(135deg, #2563EB, #06B6D4)'
+                      ? 'linear-gradient(135deg, #E5E7EB, #9CA3AF)'
                       : 'linear-gradient(135deg, #1E2D45, #2563EB40)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '13px', fontWeight: '700', color: 'white', flexShrink: 0,
+                    fontSize: '13px', fontWeight: '700', color: selectedCandidate?.id === c.id ? '#0A0C12' : 'white', 
+                    flexShrink: 0,
                   }}>
                     {c.fullName?.charAt(0).toUpperCase() || '?'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
                       fontWeight: '700', fontSize: '13px',
-                      color: selectedCandidate?.id === c.id ? '#60A5FA' : 'var(--text)',
+                      color: selectedCandidate?.id === c.id ? '#FFFFFF' : 'var(--text)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {c.fullName}
@@ -336,7 +348,7 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                   {selectedCandidate?.id === c.id && (
                     <div style={{
                       marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%',
-                      background: '#2563EB', boxShadow: '0 0 8px #2563EB80', flexShrink: 0,
+                      background: '#E5E7EB', boxShadow: '0 0 12px rgba(255,255,255,0.5)', flexShrink: 0,
                     }} />
                   )}
                 </button>
@@ -347,7 +359,18 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
 
         {/* Resume status card */}
         {selectedCandidate && (
-          <div className="card" style={{ padding: '20px' }}>
+          <div 
+            className="card-gray" 
+            id="resumeStatusCard"
+            onMouseMove={(e) => {
+              const el = document.getElementById('resumeStatusCard')
+              if(!el) return
+              const rect = el.getBoundingClientRect()
+              el.style.setProperty('--mouse-x', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+              el.style.setProperty('--mouse-y', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+            }}
+            style={{ padding: '20px' }}
+          >
             <p style={{
               fontSize: '12px', fontFamily: 'var(--font-mono)',
               color: 'var(--text-dim)', letterSpacing: '0.08em',
@@ -359,7 +382,7 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{
                   width: '14px', height: '14px', borderRadius: '50%',
-                  border: '2px solid var(--border)', borderTopColor: 'var(--accent)',
+                  border: '2px solid var(--border)', borderTopColor: '#E5E7EB',
                   animation: 'spin 0.8s linear infinite', flexShrink: 0,
                 }} />
                 <p style={{ color: 'var(--text-dim)', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
@@ -373,12 +396,12 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
               </p>
             )}
             {!resumeLoading && pdfUrl && (
-              <p style={{ color: 'var(--green)', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+              <p style={{ color: '#E5E7EB', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
                 ✓ Resume loaded
               </p>
             )}
             {error && (
-              <p style={{ color: '#EF4444', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+              <p style={{ color: '#F87171', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
                 ⚠️ {error}
               </p>
             )}
@@ -387,7 +410,18 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
       </div>
 
       {/* Right — chat panel */}
-      <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+      <div 
+        className="card-gray" 
+        id="chatPanelCard"
+        onMouseMove={(e) => {
+          const el = document.getElementById('chatPanelCard')
+          if(!el) return
+          const rect = el.getBoundingClientRect()
+          el.style.setProperty('--mouse-x', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+          el.style.setProperty('--mouse-y', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+        }}
+        style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}
+      >
 
         {!selectedCandidate ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
@@ -398,7 +432,7 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
             <div style={{
               width: '28px', height: '28px', borderRadius: '50%',
-              border: '2px solid var(--border)', borderTopColor: 'var(--accent)',
+              border: '2px solid var(--border)', borderTopColor: '#E5E7EB',
               animation: 'spin 0.8s linear infinite',
             }} />
           </div>
@@ -416,20 +450,28 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
             <iframe
               src={pdfUrl}
               width="100%"
-              style={{ border: 'none', borderRadius: 'var(--radius)', flex: 1, minHeight: '420px' }}
+              style={{ border: 'none', borderRadius: 'var(--radius)', flex: 1, minHeight: '420px', background: 'rgba(0,0,0,0.2)' }}
               title={`Resume - ${selectedCandidate.fullName}`}
             />
             <button
               onClick={generateQuestions}
               disabled={aiLoading || !resumeText}
+              className="btn-primary-gray"
+              onMouseMove={(e) => {
+                const el = e.currentTarget
+                const rect = el.getBoundingClientRect()
+                el.style.setProperty('--mouse-x', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+                el.style.setProperty('--mouse-y', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+              }}
               style={{
                 padding: '10px', borderRadius: '10px', border: 'none',
-                background: aiLoading || !resumeText ? 'var(--surface2)' : '#2563EB',
-                color: aiLoading || !resumeText ? 'var(--text-dim)' : 'white',
+                background: aiLoading || !resumeText ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))',
+                color: aiLoading || !resumeText ? 'var(--text-dim)' : '#FFFFFF',
                 fontSize: '13px', fontWeight: '600',
                 cursor: aiLoading || !resumeText ? 'not-allowed' : 'pointer',
                 fontFamily: 'var(--font-display)',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.3s ease',
+                border: aiLoading || !resumeText ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.2)',
               }}
             >
               {aiLoading ? 'Generating...' : 'Generate Questions'}
@@ -447,7 +489,7 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
               gap: '12px',
             }}>
               <div>
-                <p style={{ fontWeight: '700', fontSize: '15px', margin: 0 }}>{selectedCandidate.fullName}</p>
+                <p style={{ fontWeight: '700', fontSize: '15px', margin: 0, color: '#FFFFFF' }}>{selectedCandidate.fullName}</p>
                 <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '2px 0 0' }}>
                   {selectedCandidate.email}
                 </p>
@@ -455,26 +497,28 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{
                   padding: '4px 10px', borderRadius: '6px',
-                  background: '#10B98115', border: '1px solid #10B98140',
-                  fontSize: '11px', fontWeight: '600', color: '#10B981',
+                  background: 'rgba(229,231,235,0.1)', border: '1px solid rgba(229,231,235,0.25)',
+                  fontSize: '11px', fontWeight: '600', color: '#E5E7EB',
                   fontFamily: 'var(--font-mono)',
                 }}>AI Ready</span>
                 <button
                   onClick={resetToResume}
                   style={{
                     padding: '4px 10px', borderRadius: '6px',
-                    background: 'var(--surface2)', border: '1px solid var(--border)',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
                     fontSize: '11px', color: 'var(--text-dim)',
                     cursor: 'pointer', fontFamily: 'var(--font-mono)',
-                    transition: 'all 0.2s ease',
+                    transition: 'all 0.3s ease',
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--surface3)'
-                    e.currentTarget.style.color = 'var(--text)'
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+                    e.currentTarget.style.color = '#FFFFFF'
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = 'var(--surface2)'
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
                     e.currentTarget.style.color = 'var(--text-dim)'
+                    e.currentTarget.style.borderColor = 'var(--border)'
                   }}
                 >
                   ← Resume
@@ -500,10 +544,11 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                   <div style={{
                     maxWidth: '85%', padding: '12px 16px',
                     borderRadius: msg.role === 'user' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                    background: msg.role === 'user' ? '#2563EB20' : 'var(--surface2)',
-                    border: `1px solid ${msg.role === 'user' ? '#2563EB40' : 'var(--border)'}`,
+                    background: msg.role === 'user' ? 'rgba(229,231,235,0.12)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${msg.role === 'user' ? 'rgba(229,231,235,0.2)' : 'var(--border)'}`,
                     fontSize: '13px', lineHeight: 1.7,
-                    color: 'var(--text)', whiteSpace: 'pre-wrap',
+                    color: msg.role === 'user' ? '#FFFFFF' : 'var(--text)', 
+                    whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}>
                     {msg.content}
@@ -514,7 +559,7 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                 <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                   <div style={{
                     padding: '12px 16px', borderRadius: '12px 12px 12px 4px',
-                    background: 'var(--surface2)', border: '1px solid var(--border)',
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
                     fontSize: '13px', color: 'var(--text-dim)',
                     display: 'flex', alignItems: 'center', gap: '4px',
                   }}>
@@ -537,11 +582,13 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage() }}
                 placeholder="Ask follow-up, request more questions..."
+                className="input-gray"
                 style={{
                   flex: 1, padding: '12px 14px',
                   borderRadius: 'var(--radius)',
                   border: '1px solid var(--border)',
-                  background: 'var(--surface2)', color: 'var(--text)',
+                  background: 'rgba(15,18,26,0.9)',
+                  color: 'var(--text)',
                   fontSize: '14px', fontFamily: 'var(--font-body)', outline: 'none',
                 }}
                 disabled={aiLoading}
@@ -549,13 +596,22 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
               <button
                 onClick={sendMessage}
                 disabled={!input.trim() || aiLoading}
-                className="btn-primary"
+                className="btn-primary-gray"
+                onMouseMove={(e) => {
+                  const el = e.currentTarget
+                  const rect = el.getBoundingClientRect()
+                  el.style.setProperty('--mouse-x', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+                  el.style.setProperty('--mouse-y', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+                }}
                 style={{ 
                   padding: '12px 20px', 
                   fontSize: '14px', 
                   flexShrink: 0,
                   opacity: !input.trim() || aiLoading ? 0.5 : 1,
                   cursor: !input.trim() || aiLoading ? 'not-allowed' : 'pointer',
+                  background: !input.trim() || aiLoading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))',
+                  border: !input.trim() || aiLoading ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.2)',
+                  color: '#FFFFFF',
                 }}
               >
                 Send
@@ -572,6 +628,68 @@ fetch(`/api/users/${selectedCandidate.id}/resume`, {
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        
+        /* Card styles with mouse-following glow */
+        .card-gray {
+          background: linear-gradient(145deg, var(--bg-surface) 0%, rgba(15,18,26,0.95) 100%);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          isolation: isolate;
+        }
+        
+        .card-gray::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle 200px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
+          opacity: 0;
+          transition: opacity 0.25s ease;
+          pointer-events: none;
+          border-radius: inherit;
+        }
+        
+        .card-gray:hover {
+          border-color: rgba(255,255,255,0.15);
+        }
+        
+        .card-gray:hover::before {
+          opacity: 1;
+        }
+        
+        /* Primary button with glow */
+        .btn-primary-gray {
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s ease;
+        }
+        
+        .btn-primary-gray::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle 150px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 35%, transparent 65%);
+          opacity: 0;
+          transition: opacity 0.3s ease;
+          pointer-events: none;
+        }
+        
+        .btn-primary-gray:hover:not(:disabled)::before {
+          opacity: 1;
+        }
+        
+        /* Input styles */
+        .input-gray {
+          transition: all 0.3s ease;
+        }
+        
+        .input-gray:focus {
+          border-color: rgba(255,255,255,0.35);
+          box-shadow: 0 0 0 3px rgba(255,255,255,0.04);
+          background: rgba(25,30,42,0.95);
         }
       `}</style>
     </div>

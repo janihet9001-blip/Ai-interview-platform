@@ -38,7 +38,7 @@ async function apiFetch(path, options = {}) {
 }
 
 const pctColor = (pct) =>
-  pct >= 70 ? '#10B981' : pct >= 45 ? '#F59E0B' : '#EF4444'
+  pct >= 70 ? '#E5E7EB' : pct >= 45 ? '#D1D5DB' : '#9CA3AF'
 
 const statusInfo = (scorePct) => {
   if (scorePct === null || scorePct === undefined)
@@ -290,8 +290,8 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '80px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
       <div style={{
-        width: '32px', height: '32px', border: '3px solid var(--border)',
-        borderTopColor: '#2563EB', borderRadius: '50%',
+        width: '32px', height: '32px', border: '2px solid var(--border)',
+        borderTopColor: '#E5E7EB', borderRadius: '50%',
         animation: 'spin 0.8s linear infinite', margin: '0 auto 16px',
       }} />
       Loading candidates...
@@ -313,9 +313,8 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
 
       {/* Error */}
       {error && (
-        <div style={{
-          background: '#EF444415', border: '1px solid #EF444440',
-          borderRadius: 'var(--radius)', padding: '12px 16px',
+        <div className="card-gray" style={{
+          padding: '12px 16px',
           fontSize: '13px', color: '#F87171',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
@@ -333,15 +332,17 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
             placeholder="Search by name, role or session ID..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            className="input-gray"
             style={{
               width: '100%', padding: '10px 34px 10px 34px',
               borderRadius: 'var(--radius)', border: '1px solid var(--border)',
-              background: 'var(--surface2)', color: 'var(--text)',
+              background: 'rgba(15,18,26,0.9)',
+              color: 'var(--text)',
               fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
-              boxSizing: 'border-box', transition: 'border-color 0.2s',
+              boxSizing: 'border-box', transition: 'all 0.3s ease',
             }}
-            onFocus={e => e.target.style.borderColor = '#2563EB'}
-            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+            onFocus={e => { e.target.style.borderColor = 'rgba(255,255,255,0.35)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.04)' }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
           />
           {search && (
             <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '13px' }}>✕</button>
@@ -349,13 +350,13 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
         </div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {['ALL', 'SELECTED', 'ON HOLD', 'NOT SELECTED', 'PENDING'].map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)} style={{
+            <button key={s} onClick={() => setFilterStatus(s)} className="filter-btn" style={{
               padding: '6px 14px', borderRadius: '20px', fontSize: '11px',
               fontFamily: 'var(--font-mono)', fontWeight: '600', cursor: 'pointer',
-              border: `1px solid ${filterStatus === s ? '#2563EB' : 'var(--border)'}`,
-              background: filterStatus === s ? '#2563EB20' : 'var(--surface2)',
-              color: filterStatus === s ? '#60A5FA' : 'var(--text-dim)',
-              transition: 'all 0.15s',
+              border: `1px solid ${filterStatus === s ? 'rgba(255,255,255,0.35)' : 'var(--border)'}`,
+              background: filterStatus === s ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)',
+              color: filterStatus === s ? '#FFFFFF' : 'var(--text-dim)',
+              transition: 'all 0.3s ease',
             }}>
               {s} <span style={{ opacity: 0.6 }}>({statusCounts[s] || 0})</span>
             </button>
@@ -397,12 +398,16 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
             const isSaving = savingId === session.id
 
             return (
-              <div key={session.id} style={{
-                border: `1px solid ${isOpen ? '#2563EB60' : 'var(--border)'}`,
-                borderRadius: 'var(--radius-lg)',
-                background: isOpen ? '#2563EB08' : 'var(--surface)',
-                overflow: 'hidden', transition: 'border-color 0.15s, background 0.15s',
-              }}>
+              <div 
+                key={session.id} 
+                className={`candidate-row ${isOpen ? 'open' : ''}`}
+                style={{
+                  border: `1px solid ${isOpen ? 'rgba(255,255,255,0.2)' : 'var(--border)'}`,
+                  borderRadius: 'var(--radius-lg)',
+                  background: isOpen ? 'rgba(255,255,255,0.03)' : 'var(--surface)',
+                  overflow: 'hidden', transition: 'all 0.3s ease',
+                }}
+              >
 
                 {/* Row */}
                 <div
@@ -415,16 +420,16 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                     gap: '12px', padding: '16px 20px',
                     alignItems: 'center', cursor: 'pointer',
                   }}
-                  onMouseEnter={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'var(--surface2)' }}
+                  onMouseEnter={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'rgba(255,255,255,0.05)' }}
                   onMouseLeave={e => { if (!isOpen) e.currentTarget.parentElement.style.background = 'var(--surface)' }}
                 >
                   {/* Candidate */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                     <div style={{
                       width: '38px', height: '38px', borderRadius: '50%', flexShrink: 0,
-                      background: 'linear-gradient(135deg, #2563EB, #06B6D4)',
+                      background: 'linear-gradient(135deg, #E5E7EB, #9CA3AF)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: 'white',
+                      fontFamily: 'var(--font-display)', fontWeight: '800', fontSize: '13px', color: '#0A0C12',
                     }}>{initials(name)}</div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
@@ -443,7 +448,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                     {/* AI Score */}
                     <div style={{
                       textAlign: 'center', padding: '6px 4px', borderRadius: '8px',
-                      background: 'var(--surface2)', border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)',
                     }}>
                       {aiScorePct !== null ? (
                         <>
@@ -469,7 +474,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                     {/* Recruiter Score */}
                     <div style={{
                       textAlign: 'center', padding: '6px 4px', borderRadius: '8px',
-                      background: recruiterScore != null ? `${pctColor(recruiterScore)}10` : 'var(--surface2)',
+                      background: recruiterScore != null ? `${pctColor(recruiterScore)}10` : 'rgba(255,255,255,0.03)',
                       border: `1px solid ${recruiterScore != null ? `${pctColor(recruiterScore)}40` : 'var(--border)'}`,
                     }}>
                       {recruiterScore != null ? (
@@ -496,7 +501,7 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                   </div>
 
                   {/* Chevron */}
-                  <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</div>
+                  <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px', transition: 'transform 0.3s ease', transform: isOpen ? 'rotate(180deg)' : 'none' }}>▾</div>
                 </div>
 
                 {/* Expanded */}
@@ -504,14 +509,15 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                   <div style={{
                     borderTop: '1px solid var(--border)', padding: '20px',
                     display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
-                    animation: 'fadeIn 0.15s ease',
+                    animation: 'fadeIn 0.3s ease',
                   }}>
 
                     {/* AI Remark — single paragraph */}
-                    <div style={{
+                    <div className="card-gray" style={{
                       padding: '16px', borderRadius: 'var(--radius)',
-                      background: '#1e293b', border: '1px solid #334155',
-                      borderLeft: '3px solid #8B5CF6',
+                      background: 'linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95))',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderLeft: '3px solid #A78BFA',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                         <span style={{ fontSize: '15px' }}>🤖</span>
@@ -543,20 +549,24 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                     </div>
 
                     {/* Recruiter Remark */}
-                    <div style={{
+                    <div className="card-gray" style={{
                       padding: '16px', borderRadius: 'var(--radius)',
-                      background: 'var(--surface2)', border: '1px solid var(--border)',
-                      borderLeft: '3px solid #2563EB',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--border)',
+                      borderLeft: '3px solid #E5E7EB',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '15px' }}>✍️</span>
-                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#60A5FA', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>Your Remark</span>
+                          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#E5E7EB', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: '600' }}>Your Remark</span>
                         </div>
                         {editingRemark !== session.id && (
                           <button
                             onClick={() => startEditing(session.id, recruiterRemark, recruiterScore)}
-                            style={{ padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontFamily: 'var(--font-mono)', cursor: 'pointer', background: '#2563EB20', border: '1px solid #2563EB60', color: '#60A5FA', fontWeight: '600' }}
+                            className="edit-btn"
+                            style={{ padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontFamily: 'var(--font-mono)', cursor: 'pointer', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#E5E7EB', fontWeight: '600', transition: 'all 0.3s ease' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)' }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
                           >{recruiterRemark || recruiterScore != null ? 'Edit' : '+ Add'}</button>
                         )}
                       </div>
@@ -569,9 +579,10 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                             onChange={e => setRemarkDraft(e.target.value)}
                             placeholder="Write your remark about this candidate..."
                             rows={3}
+                            className="input-gray"
                             style={{
                               width: '100%', padding: '10px', borderRadius: '8px',
-                              border: '1px solid #2563EB60', background: 'var(--surface)',
+                              border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(15,18,26,0.9)',
                               color: 'var(--text)', fontSize: '13px',
                               fontFamily: 'var(--font-body)', outline: 'none',
                               resize: 'vertical', boxSizing: 'border-box', lineHeight: '1.6',
@@ -592,10 +603,11 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                                   if (v === '' || (Number(v) >= 0 && Number(v) <= 100)) setScoreDraft(v)
                                 }}
                                 placeholder="0–100"
+                                className="input-gray"
                                 style={{
                                   width: '100%', padding: '7px 30px 7px 10px',
-                                  borderRadius: '8px', border: '1px solid #2563EB60',
-                                  background: 'var(--surface)', color: 'var(--text)',
+                                  borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)',
+                                  background: 'rgba(15,18,26,0.9)', color: 'var(--text)',
                                   fontSize: '13px', fontFamily: 'var(--font-mono)',
                                   outline: 'none', boxSizing: 'border-box',
                                 }}
@@ -611,12 +623,16 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             <button
                               onClick={cancelEditing}
-                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
+                              className="btn-ghost-gray"
+                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.3s ease' }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = '#FFFFFF' }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}
                             >Cancel</button>
                             <button
                               disabled={isSaving}
                               onClick={() => saveRemark(session.id, remarkDraft, scoreDraft)}
-                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'var(--surface3)' : '#2563EB', border: 'none', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)' }}
+                              className="btn-primary-gray"
+                              style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: isSaving ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))', border: isSaving ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.2)', color: 'white', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: '600', fontFamily: 'var(--font-body)', transition: 'all 0.3s ease', opacity: isSaving ? 0.6 : 1 }}
                             >{isSaving ? 'Saving…' : 'Save'}</button>
                           </div>
                         </div>
@@ -656,6 +672,56 @@ export default function CandidatesTab({ candidates, sessions = [], loading = fal
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Card styles with mouse-following glow */
+        .card-gray {
+          background: linear-gradient(145deg, var(--bg-surface) 0%, rgba(15,18,26,0.95) 100%);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          isolation: isolate;
+        }
+        
+        .card-gray::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle 200px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
+          opacity: 0;
+          transition: opacity 0.25s ease;
+          pointer-events: none;
+          border-radius: inherit;
+        }
+        
+        .card-gray:hover {
+          border-color: rgba(255,255,255,0.15);
+        }
+        
+        .card-gray:hover::before {
+          opacity: 1;
+        }
+        
+        /* Input styles */
+        .input-gray {
+          transition: all 0.3s ease;
+        }
+        
+        .input-gray:focus {
+          border-color: rgba(255,255,255,0.35);
+          box-shadow: 0 0 0 3px rgba(255,255,255,0.04);
+          background: rgba(25,30,42,0.95);
+        }
+        
+        /* Candidate row hover effect */
+        .candidate-row {
+          transition: all 0.3s ease;
+        }
+        
+        .candidate-row:hover {
+          border-color: rgba(255,255,255,0.12);
+        }
       `}</style>
     </div>
   )
