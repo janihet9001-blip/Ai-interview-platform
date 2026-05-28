@@ -12,6 +12,9 @@ export default function Login() {
   const [remember, setRemember] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [focused, setFocused] = useState('')
+  const [remainingAttempts, setRemainingAttempts] = useState(null)
+  const [lockoutMinutes, setLockoutMinutes] = useState(null)
+  const [rateLimitError, setRateLimitError] = useState(false)
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme')
     return saved || 'dark'
@@ -36,9 +39,30 @@ export default function Login() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark')
   }
 
+  // Countdown timer for lockout
   useEffect(() => {
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('user')
+    if (!lockoutMinutes || lockoutMinutes <= 0) return
+    
+    const interval = setInterval(() => {
+      setLockoutMinutes(prev => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          setLockoutMinutes(null)
+          setRemainingAttempts(null)
+          return null
+        }
+        return prev - 1
+      })
+    }, 60000)
+    
+    return () => clearInterval(interval)
+  }, [lockoutMinutes])
+
+  useEffect(() => {
+    if (sessionStorage.getItem('token')) {
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('auth')
+    }
   }, [])
 
   useEffect(() => {
@@ -107,11 +131,31 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setRemainingAttempts(null)
+    setRateLimitError(false)
+    
     try {
       const { data } = await api.post('/auth/login', { email, password })
       login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
-    } catch {
-      setError('Invalid email or password')
+    } catch (err) {
+      const response = err.response?.data
+      
+      if (err.response?.status === 429) {
+        if (response?.code === 'ACCOUNT_LOCKED') {
+          setLockoutMinutes(response.remainingMinutes || 15)
+          setError(response.error || 'Account temporarily locked due to multiple failed attempts.')
+        } else {
+          setRateLimitError(true)
+          setError(response?.error || 'Too many requests. Please wait a minute.')
+        }
+      } else if (err.response?.status === 401) {
+        setError(response?.error || 'Invalid email or password')
+        if (response?.remainingAttempts !== undefined && response.remainingAttempts > 0) {
+          setRemainingAttempts(response.remainingAttempts)
+        }
+      } else {
+        setError('Invalid email or password')
+      }
       setLoading(false)
     }
   }
@@ -434,6 +478,24 @@ export default function Login() {
         }
         .lp-forgot:hover { color: var(--text); }
 
+        /* info message (remaining attempts) */
+        .lp-info {
+          display: flex; align-items: center; gap: 8px;
+          padding: 10px 13px;
+          background: rgba(249,115,22,0.1);
+          border: 1px solid rgba(249,115,22,0.3);
+          border-radius: 9px;
+          color: #F97316;
+          font-size: 12px;
+          margin-bottom: 14px;
+          font-family: var(--font-mono);
+          animation: fadeInInfo 0.3s ease;
+        }
+        @keyframes fadeInInfo {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
         /* error */
         .lp-error {
           display: flex; align-items: center; gap: 8px;
@@ -683,11 +745,48 @@ export default function Login() {
                 </div>
                 Remember me
               </label>
-              <button type="button" className="lp-forgot">Forgot password?</button>
+              <button type="button" className="lp-forgot" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }}>
+                Forgot password?
+              </button>
             </div>
 
+            {/* Remaining Attempts Info */}
+            {remainingAttempts !== null && remainingAttempts > 0 && (
+              <div className="lp-info">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {remainingAttempts} attempt{remainingAttempts !== 1 ? 's' : ''} remaining before temporary lock
+              </div>
+            )}
+
+            {/* Lockout Info */}
+            {lockoutMinutes !== null && lockoutMinutes > 0 && (
+              <div className="lp-error" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                Account temporarily locked. {lockoutMinutes} minute{lockoutMinutes !== 1 ? 's' : ''} remaining.
+              </div>
+            )}
+
+            {/* Rate Limit Error */}
+            {rateLimitError && (
+              <div className="lp-error" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                Too many requests. Please wait a minute.
+              </div>
+            )}
+
             {/* Error */}
-            {error && (
+            {error && !lockoutMinutes && !rateLimitError && (
               <div className="lp-error">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10"/>
@@ -700,7 +799,7 @@ export default function Login() {
 
             {/* Submit */}
             <button
-              type="submit" className="btn-launch" disabled={loading}
+              type="submit" className="btn-launch" disabled={loading || lockoutMinutes !== null}
               onMouseMove={trackMouse}
             >
               {loading && <span className="lp-spinner" />}

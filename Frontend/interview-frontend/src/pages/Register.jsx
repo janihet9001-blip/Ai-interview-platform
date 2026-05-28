@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import api from '../services/api'
 
 export default function Register() {
@@ -14,6 +15,7 @@ export default function Register() {
   const [focused,    setFocused]    = useState('')
   const [touched,    setTouched]    = useState({ fullName: false, email: false, password: false })
   const { login }   = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const navigate    = useNavigate()
   const vantaRef    = useRef(null)
   const vantaEffect = useRef(null)
@@ -41,8 +43,9 @@ export default function Register() {
           el: vantaRef.current,
           mouseControls: true, touchControls: true, gyroControls: false,
           minHeight: 200, minWidth: 200, scale: 1.0, scaleMobile: 1.0,
-          color: 0x8E9AA8, color2: 0x4A5568,
-          backgroundColor: 0x06080D,
+          color: theme === 'dark' ? 0x8E9AA8 : 0x475569,
+          color2: theme === 'dark' ? 0x4A5568 : 0x94A3B8,
+          backgroundColor: theme === 'dark' ? 0x06080D : 0xFFFFFF,
           points: 10, maxDistance: 22, spacing: 20,
         })
       } catch (err) { console.error('Vanta init failed:', err) }
@@ -59,7 +62,7 @@ export default function Register() {
       if (retryTimer) clearTimeout(retryTimer)
       if (vantaEffect.current) { try { vantaEffect.current.destroy() } catch (e) {} vantaEffect.current = null }
     }
-  }, [])
+  }, [theme])
 
   /* ── Validation ── */
   const validateFullName = useCallback((v) => {
@@ -106,7 +109,9 @@ export default function Register() {
       if (resumeFile) {
         try {
           const fd = new FormData(); fd.append('file', resumeFile)
-          await fetch(`${import.meta.env.VITE_API_URL}/users/upload-resume`, { method: 'POST', headers: { Authorization: `Bearer ${data.token}` }, body: fd, signal: abortRef.current.signal })
+          await api.post('/users/upload-resume', fd, {
+            headers: { Authorization: `Bearer ${data.token}`, 'Content-Type': 'multipart/form-data' }
+          })
         } catch (uploadErr) { if (uploadErr.name !== 'AbortError') setError('Account created but resume upload failed. You can upload later.') }
       }
       login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
@@ -135,22 +140,38 @@ export default function Register() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-        :root {
-          --bg-dark:          #0A0C12;
-          --bg-darker:        #06080D;
-          --bg-surface:       #0F121A;
+        /* Dark Theme (default) */
+        :root,
+        .dark {
+          --bg-dark: #0A0C12;
+          --bg-darker: #06080D;
+          --bg-surface: #0F121A;
           --bg-surface-light: #151A24;
-          --border:           rgba(255,255,255,0.05);
-          --border-light:     rgba(255,255,255,0.08);
-          --text:             #E8EDF2;
-          --text-dim:         #8E9AA8;
-          --text-muted:       #4A5568;
-          --font-mono:        'JetBrains Mono', monospace;
-          --font-display:     'Inter', system-ui, sans-serif;
-          --font-body:        'Inter', system-ui, sans-serif;
-          --radius:           12px;
-          --radius-lg:        16px;
+          --border: rgba(255,255,255,0.05);
+          --border-light: rgba(255,255,255,0.08);
+          --text: #E8EDF2;
+          --text-dim: #8E9AA8;
+          --text-muted: #4A5568;
+          --font-mono: 'JetBrains Mono', monospace;
+          --font-display: 'Inter', system-ui, sans-serif;
+          --font-body: 'Inter', system-ui, sans-serif;
+          --radius: 12px;
+          --radius-lg: 16px;
         }
+
+        /* Light Theme */
+        .light {
+          --bg-dark: #F8FAFC;
+          --bg-darker: #FFFFFF;
+          --bg-surface: #FFFFFF;
+          --bg-surface-light: #F1F5F9;
+          --border: rgba(0, 0, 0, 0.08);
+          --border-light: rgba(0, 0, 0, 0.05);
+          --text: #0F172A;
+          --text-dim: #475569;
+          --text-muted: #64748B;
+        }
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         .rg-page {
@@ -170,6 +191,11 @@ export default function Register() {
             radial-gradient(ellipse 60% 40% at 20% 10%, rgba(30,40,60,0.3) 0%, transparent 55%),
             radial-gradient(ellipse 50% 35% at 85% 80%, rgba(20,30,50,0.25) 0%, transparent 60%);
         }
+        .light .scene-bg {
+          background:
+            radial-gradient(ellipse 60% 40% at 20% 10%, rgba(0,0,0,0.03) 0%, transparent 55%),
+            radial-gradient(ellipse 50% 35% at 85% 80%, rgba(0,0,0,0.02) 0%, transparent 60%);
+        }
 
         /* particles */
         .rg-particles { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
@@ -178,6 +204,7 @@ export default function Register() {
           background: rgba(255,255,255,0.1);
           animation: rgRise linear infinite;
         }
+        .light .rg-particle { background: rgba(0,0,0,0.08); }
         @keyframes rgRise {
           0%   { transform: translateY(0) scale(1);        opacity: 0; }
           10%  { opacity: 0.5; }
@@ -188,6 +215,7 @@ export default function Register() {
         /* rings */
         .rg-rings { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; pointer-events: none; }
         .rg-ring  { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,0.05); width: 80px; height: 80px; animation: rgRing 12s ease-out infinite; }
+        .light .rg-ring { border: 1px solid rgba(0,0,0,0.08); }
         @keyframes rgRing { 0%{width:80px;height:80px;opacity:0.4} 100%{width:900px;height:900px;opacity:0} }
 
         /* top badge */
@@ -198,12 +226,17 @@ export default function Register() {
           font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; color: var(--text-dim);
           white-space: nowrap; backdrop-filter: blur(12px); z-index: 10;
         }
+        .light .rg-top-badge {
+          background: rgba(255,255,255,0.9);
+          border: 1px solid rgba(0,0,0,0.08);
+        }
         .rg-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px rgba(16,185,129,0.5); flex-shrink: 0; animation: pulseDot 1.8s ease-in-out infinite; }
         @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(1.3)} }
 
         /* stat chips */
         .rg-chip { position: absolute; display: flex; flex-direction: column; align-items: center; padding: 10px 16px; background: linear-gradient(145deg,var(--bg-surface) 0%,rgba(15,18,26,0.95) 100%); border: 1px solid var(--border-light); border-radius: 14px; backdrop-filter: blur(12px); z-index: 10; animation: chipFloat 5s ease-in-out infinite; }
-        .rg-chip-v { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: #fff; line-height: 1; }
+        .light .rg-chip { background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%); border: 1px solid rgba(0,0,0,0.06); }
+        .rg-chip-v { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--text); line-height: 1; }
         .rg-chip-l { font-size: 9px; color: var(--text-dim); font-weight: 600; letter-spacing: .5px; margin-top: 3px; font-family: var(--font-mono); }
         .rg-chip-a { top: 18%; left: 5%;  animation-delay: 0s; }
         .rg-chip-b { top: 18%; right: 5%; animation-delay: 1.6s; }
@@ -224,26 +257,39 @@ export default function Register() {
           transition: border-color .3s, box-shadow .3s;
           isolation: isolate;
         }
+        .light .rg-card {
+          background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%);
+          border: 1px solid rgba(0,0,0,0.08);
+          box-shadow: 0 8px 60px rgba(0,0,0,0.06), inset 0 0 80px rgba(0,0,0,0.01);
+        }
         .rg-card::-webkit-scrollbar { display: none; }
         .rg-card::before {
           content: ''; position: absolute; inset: 0; border-radius: 20px;
           background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
           opacity: 0; transition: opacity .25s ease; pointer-events: none;
         }
+        .light .rg-card::before {
+          background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.01) 40%, transparent 70%);
+        }
         .rg-card:hover { border-color: rgba(255,255,255,0.18); }
+        .light .rg-card:hover { border-color: rgba(0,0,0,0.15); }
         .rg-card:hover::before { opacity: 1; }
         @keyframes cardIn { from{opacity:0;transform:translateY(24px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
 
         .card-shimmer { position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg,transparent,rgba(255,255,255,0.18),rgba(255,255,255,0.08),transparent); border-radius: 20px 20px 0 0; pointer-events: none; }
+        .light .card-shimmer { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), rgba(0,0,0,0.05), transparent); }
 
         /* brand */
         .rg-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; justify-content: center; }
         .rg-logo-box { width: 40px; height: 40px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-light); border-radius: 11px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(255,255,255,0.06); flex-shrink: 0; }
+        .light .rg-logo-box { background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); }
         .rg-brand-name { font-family: var(--font-display); font-size: 20px; font-weight: 800; background: linear-gradient(110deg,#FFFFFF 20%,#8E9AA8 50%,#FFFFFF 80%); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: shimmerText 4s linear infinite; letter-spacing: -.02em; }
+        .light .rg-brand-name { background: linear-gradient(110deg, #1E293B 20%, #64748B 50%, #1E293B 80%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         @keyframes shimmerText { 0%{background-position:200% center} 100%{background-position:-200% center} }
 
-        .rg-h1 { font-family: var(--font-display); font-size: 24px; font-weight: 800; color: #fff; text-align: center; letter-spacing: -.03em; margin-bottom: 5px; }
+        .rg-h1 { font-family: var(--font-display); font-size: 24px; font-weight: 800; color: var(--text); text-align: center; letter-spacing: -.03em; margin-bottom: 5px; }
         .rg-sub { font-size: 11px; color: var(--text-muted); text-align: left; margin-bottom: 22px; padding-left: 12px; border-left: 2px solid rgba(255,255,255,0.12); line-height: 1.5; font-family: var(--font-mono); letter-spacing: .03em; }
+        .light .rg-sub { border-left: 2px solid rgba(0,0,0,0.1); }
 
         /* fields */
         .rg-field { margin-bottom: 14px; }
@@ -260,14 +306,22 @@ export default function Register() {
           color: var(--text); font-family: var(--font-body); font-size: 13px;
           outline: none; transition: border-color .2s, box-shadow .2s, background .2s;
         }
+        .light .rg-input {
+          background: rgba(0,0,0,0.02);
+          border: 1px solid rgba(0,0,0,0.08);
+          color: #0F172A;
+        }
         .rg-input::placeholder { color: var(--text-muted); }
         .rg-input:hover:not(:focus) { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); }
+        .light .rg-input:hover:not(:focus) { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.03); }
         .rg-input:focus { border-color: rgba(255,255,255,0.28); box-shadow: 0 0 0 3px rgba(255,255,255,0.05); background: rgba(255,255,255,0.06); }
+        .light .rg-input:focus { border-color: rgba(0,0,0,0.25); box-shadow: 0 0 0 3px rgba(0,0,0,0.03); background: rgba(0,0,0,0.04); }
         .rg-input-err { border-color: rgba(248,113,113,0.4) !important; }
         .rg-input-p { padding-right: 42px; }
 
         .rg-eye { position: absolute; right: 11px; background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px; border-radius: 6px; transition: color .15s, background .15s; }
         .rg-eye:hover { color: var(--text-dim); background: rgba(255,255,255,0.06); }
+        .light .rg-eye:hover { background: rgba(0,0,0,0.04); }
 
         .rg-field-err { font-size: 10px; color: #F87171; font-family: var(--font-mono); margin-top: 5px; }
         .rg-field-hint { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 5px; }
@@ -279,9 +333,12 @@ export default function Register() {
           border: 1px dashed rgba(255,255,255,0.1); border-radius: 10px;
           cursor: pointer; transition: all .2s;
         }
+        .light .rg-upload { background: rgba(0,0,0,0.01); border: 1px dashed rgba(0,0,0,0.1); }
         .rg-upload:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.04); }
+        .light .rg-upload:hover { border-color: rgba(0,0,0,0.2); background: rgba(0,0,0,0.02); }
         .rg-upload-ok { border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.04); }
         .rg-upload-icon { width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; }
+        .light .rg-upload-icon { background: rgba(0,0,0,0.03); }
 
         /* error box */
         .rg-error { display: flex; align-items: center; gap: 8px; padding: 10px 13px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); border-radius: 9px; color: #F87171; font-size: 12px; margin-bottom: 13px; animation: errIn .25s ease; }
@@ -296,13 +353,21 @@ export default function Register() {
           position: relative; overflow: hidden; letter-spacing: .01em;
           display: flex; align-items: center; justify-content: center; gap: 10px;
         }
+        .light .btn-launch {
+          background: rgba(0,0,0,0.05);
+          border: 1px solid rgba(0,0,0,0.12);
+          color: #0F172A;
+        }
         .btn-launch::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle 150px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 40%, transparent 70%); opacity: 0; transition: opacity .25s ease; pointer-events: none; }
+        .light .btn-launch::before { background: radial-gradient(circle 150px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.03) 40%, transparent 70%); }
         .btn-launch:hover:not(:disabled) { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.38); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(255,255,255,0.07); }
+        .light .btn-launch:hover:not(:disabled) { background: rgba(0,0,0,0.1); border-color: rgba(0,0,0,0.25); box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .btn-launch:hover:not(:disabled)::before { opacity: 1; }
         .btn-launch:active:not(:disabled) { transform: translateY(0); }
         .btn-launch:disabled { opacity: .3; cursor: not-allowed; }
 
         .rg-spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0; }
+        .light .rg-spinner { border: 2px solid rgba(0,0,0,0.2); border-top-color: #0F172A; }
         @keyframes spin { to{transform:rotate(360deg)} }
 
         /* divider */
@@ -318,7 +383,9 @@ export default function Register() {
         /* trust */
         .rg-trust { display: flex; justify-content: center; gap: 7px; flex-wrap: wrap; margin: 14px 0 10px; }
         .rg-tbadge { display: flex; align-items: center; gap: 5px; padding: 3px 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 50px; font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); letter-spacing: .3px; transition: all .2s; }
+        .light .rg-tbadge { background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06); }
         .rg-tbadge:hover { background: rgba(255,255,255,0.07); border-color: var(--border-light); color: var(--text-dim); }
+        .light .rg-tbadge:hover { background: rgba(0,0,0,0.06); color: var(--text); }
 
         .rg-footer { text-align: center; font-size: 10.5px; color: var(--text-muted); }
         .rg-footer span { color: var(--text-dim); cursor: pointer; transition: color .2s; }
@@ -326,7 +393,9 @@ export default function Register() {
 
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        .light ::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); }
 
         @media(max-width:500px){
           .rg-card{width:92vw;padding:26px 16px 22px}
@@ -379,9 +448,9 @@ export default function Register() {
           <div className="rg-brand">
             <div className="rg-logo-box">
               <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-                <rect x="4" y="4" width="24" height="24" rx="6" stroke="white" strokeWidth="1.5"/>
-                <path d="M12 14L16 18L20 14" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-                <circle cx="16" cy="16" r="2.5" fill="white"/>
+                <rect x="4" y="4" width="24" height="24" rx="6" stroke="currentColor" strokeWidth="1.5" color="var(--text)"/>
+                <path d="M12 14L16 18L20 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <circle cx="16" cy="16" r="2.5" fill="currentColor"/>
               </svg>
             </div>
             <span className="rg-brand-name">InterviewAI</span>
@@ -536,6 +605,65 @@ export default function Register() {
             <span>Terms of Service</span> and <span>Privacy Policy</span>.
           </p>
         </div>
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 1000,
+            width: '44px',
+            height: '44px',
+            borderRadius: '40px',
+            background: theme === 'dark' 
+              ? 'linear-gradient(135deg, #0F121A, #151A24)'
+              : 'linear-gradient(135deg, #FFFFFF, #F1F5F9)',
+            border: theme === 'dark' 
+              ? '1px solid rgba(255,255,255,0.15)'
+              : '1px solid rgba(0,0,0,0.1)',
+            boxShadow: theme === 'dark'
+              ? '0 4px 20px rgba(0,0,0,0.3)'
+              : '0 4px 20px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease',
+            backdropFilter: 'blur(10px)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.1)'
+            e.currentTarget.style.boxShadow = theme === 'dark'
+              ? '0 0 20px rgba(255,255,255,0.15)'
+              : '0 0 20px rgba(0,0,0,0.15)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = theme === 'dark'
+              ? '0 4px 20px rgba(0,0,0,0.3)'
+              : '0 4px 20px rgba(0,0,0,0.08)'
+          }}
+        >
+          {theme === 'dark' ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8EDF2" strokeWidth="2">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+        </button>
 
       </div>
     </>

@@ -508,11 +508,6 @@ export default function Interviews() {
             <div style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#6B7280' }}>Q {current + 1}</span>
             </div>
-            <button onClick={handleFinish} disabled={!session || submitting || stopped || isAnalyzing}
-              className="ctrl-btn ctrl-btn-stop"
-              style={{ padding: '5px 16px', opacity: !session || submitting || stopped || isAnalyzing ? 0.4 : 1 }}>
-              {isAnalyzing ? 'Analyzing...' : 'Finish Interview'}
-            </button>
           </div>
         </nav>
 

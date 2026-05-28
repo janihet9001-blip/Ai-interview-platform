@@ -345,7 +345,6 @@ export default function Results() {
           <span className="rs-logo-text">InterviewAI</span>
           <span className="rs-badge" style={{ marginLeft: '4px' }}>Results</span>
         </div>
-        <button className="rs-btn-ghost" onClick={() => navigate('/dashboard')}>Dashboard</button>
       </nav>
 
       <div className="rs-inner">
@@ -355,23 +354,6 @@ export default function Results() {
           <p style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'rgba(220,222,230,0.5)', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: '8px' }}>Session Complete</p>
           <h1 className="rs-page-heading">Interview Results</h1>
         </div>
-
-        {/* Summary stats row */}
-        {scored.length > 0 && (
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'Questions', val: answeredQuestions.length, raw: true },
-              { label: 'Scored',    val: scored.length,            raw: true },
-              { label: 'Total',     val: `${totalScore} / ${maxScore}`, raw: true },
-              { label: 'Score',     val: scorePct != null ? `${scorePct}%` : '—', highlight: true },
-            ].map(({ label, val, highlight }) => (
-              <div key={label} style={{ textAlign: 'center', padding: '10px 18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', minWidth: '80px' }}>
-                <div style={{ fontSize: '9px', color: '#6B7280', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>{label}</div>
-                <div style={{ fontSize: '20px', fontWeight: '800', color: highlight ? pctColor : '#E5E7EB', fontFamily: 'var(--font-display)' }}>{val}</div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Retrying notice */}
         {retrying && (
@@ -437,14 +419,6 @@ export default function Results() {
             )
           })}
         </div>
-
-        {/* Bottom CTA */}
-        <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center' }}>
-          <button className="rs-btn-ghost" style={{ padding: '10px 28px', fontSize: '13px' }} onClick={() => navigate('/dashboard')}>
-            Return to Dashboard
-          </button>
-        </div>
-
       </div>
     </>
   )
