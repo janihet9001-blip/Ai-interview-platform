@@ -1,6 +1,5 @@
 Here is the complete README.md for your AI Interview Preparation Platform project:
 
-```markdown
 # AI Interview Preparation Platform
 
 <div align="center">
@@ -341,7 +340,6 @@ Educational purposes only.
 <div align="center">
 Built with ☕ Java, ⚛️ React, 🎥 WebRTC, and 🤖 Groq LLaMA
 </div>
-```
 
 This README includes:
 - ✅ Complete project overview
