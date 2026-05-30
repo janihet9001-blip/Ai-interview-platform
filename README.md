@@ -341,14 +341,3 @@ Educational purposes only.
 Built with ☕ Java, ⚛️ React, 🎥 WebRTC, and 🤖 Groq LLaMA
 </div>
 
-This README includes:
-- ✅ Complete project overview
-- ✅ Tech stack with badges
-- ✅ Folder structure
-- ✅ How it works (detailed flow)
-- ✅ Security features
-- ✅ WebSocket topics
-- ✅ Design system
-- ✅ Running instructions
-- ✅ Testing commands
-- ✅ Important notes
