@@ -142,13 +142,14 @@ export default function RecruiterDashboard() {
     return () => { isSubscribed = false; if (stompClient.current) { try { stompClient.current.deactivate() } catch (e) {} stompClient.current = null }; setWsConnected(false) }
   }, [activeSessionId])
 
-  const handleStart = () => {
-    if (!selectedCandidate) { setMessage('Select a candidate first'); setMessageType('error'); return }
-    setStarting(true); setMessage(''); setLiveFeed({}); setProctoringAlerts([]); setIsPaused(false); setIsStopped(false); setWsConnected(false)
-    api.post('/interview/start', { candidateId: selectedCandidate.id, jobRole: selectedRole })
-      .then(res => { setMessage(`Interview started for ${selectedCandidate.fullName} — Session #${res.data.id}`); setMessageType('success'); setActiveSessionId(res.data.id); setStarting(false) })
-      .catch((err) => { console.error('Failed to start interview:', err); setMessage('Failed to start interview.'); setMessageType('error'); setStarting(false) })
-  }
+const handleStart = () => {
+  if (!selectedCandidate) { setMessage('Select a candidate first'); setMessageType('error'); return }
+  setStarting(true); setMessage(''); setLiveFeed({}); setProctoringAlerts([]);
+  setIsPaused(false); setIsStopped(false); setWsConnected(false); setViolationCount(0)
+  api.post('/interview/start', { candidateId: selectedCandidate.id, jobRole: selectedRole })
+    .then(res => { setMessage(`Interview started for ${selectedCandidate.fullName} — Session #${res.data.id}`); setMessageType('success'); setActiveSessionId(res.data.id); setStarting(false) })
+    .catch((err) => { console.error('Failed to start interview:', err); setMessage('Failed to start interview.'); setMessageType('error'); setStarting(false) })
+}
 
   const handleEndForCheating = () => {
     if (!stompClient.current?.connected || !activeSessionId) return

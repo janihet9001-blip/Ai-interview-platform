@@ -132,16 +132,17 @@ export default function AdminCameraView({ userId }) {
 
   return (
     <>
-      <style>{`
-        @keyframes pulse-admin-cam {
-          0%, 100% { opacity: 0.6; }
-          50%       { opacity: 1;   }
-        }
-        @keyframes scanline-admin {
-          0%   { top: 0;    }
-          100% { top: 100%; }
-        }
-      `}</style>
+<style>{`
+  @keyframes pulse-admin-cam {
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1;   }
+  }
+  @keyframes scanline-admin {
+    0%   { top: 0;    }
+    100% { top: 100%; }
+  }
+  @keyframes spin-admin { to { transform: rotate(360deg); } }
+`}</style>
 
       {/* Panel wrapper — matches recruiter dashboard .panel */}
       <div style={{
@@ -327,8 +328,6 @@ export default function AdminCameraView({ userId }) {
           </p>
         </div>
       </div>
-
-      <style>{`@keyframes spin-admin { to { transform: rotate(360deg); } }`}</style>
     </>
   )
 }

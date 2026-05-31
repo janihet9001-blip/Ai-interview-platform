@@ -25,6 +25,18 @@ public class InterviewService {
     private final QuestionRepository questionRepository;
 
     public InterviewSession startSession(User candidate, String jobRole) {
+
+        // ✅ FIX: Mark any stuck IN_PROGRESS sessions as ABANDONED before creating a new one.
+        // This handles the case where a candidate closed the browser mid-interview
+        // and the old session was never properly ended.
+        List<InterviewSession> stuckSessions = sessionRepository
+                .findByUserAndStatus(candidate, InterviewSession.Status.IN_PROGRESS);
+        for (InterviewSession stuck : stuckSessions) {
+            stuck.setStatus(InterviewSession.Status.ABANDONED);
+            stuck.setCompletedAt(LocalDateTime.now());
+            sessionRepository.save(stuck);
+        }
+
         InterviewSession session = new InterviewSession();
         session.setUser(candidate);
         session.setJobRole(jobRole);

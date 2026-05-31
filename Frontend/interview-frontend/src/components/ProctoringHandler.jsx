@@ -1,75 +1,63 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 const ProctoringHandler = ({ sessionId, interviewActive, onPasteDetected, stompClient }) => {
-    
-    // Send event silently - no errors, no blocking
+    const sessionIdRef = useRef(sessionId);
+    const interviewActiveRef = useRef(interviewActive);
+    const stompClientRef = useRef(stompClient);
+
+    useEffect(() => { sessionIdRef.current = sessionId }, [sessionId]);
+    useEffect(() => { interviewActiveRef.current = interviewActive }, [interviewActive]);
+    useEffect(() => { stompClientRef.current = stompClient }, [stompClient]);
+
     const sendEvent = (eventType, details, extraData = {}) => {
-        if (!sessionId || !interviewActive) return;
-        if (!stompClient || !stompClient.connected) return;
-        
+        if (!sessionIdRef.current || !interviewActiveRef.current) return;
+        if (!stompClientRef.current || !stompClientRef.current.connected) return;
         try {
-            stompClient.publish({
+            stompClientRef.current.publish({
                 destination: '/app/proctoring-event',
                 body: JSON.stringify({
-                    sessionId: sessionId,
-                    eventType: eventType,
-                    details: details,
+                    sessionId: sessionIdRef.current,
+                    eventType,
+                    details,
                     timestamp: new Date().toISOString(),
                     ...extraData
                 })
             });
-        } catch (e) {
-            // Complete silence - never break the interview
-        }
+        } catch (e) {}
     };
 
-    // Detect PASTE only - most important feature
     useEffect(() => {
         const handlePaste = (e) => {
-            if (!interviewActive) return;
-            
+            if (!interviewActiveRef.current) return;
             const target = e.target;
-            const isAnswerField = target.tagName === 'TEXTAREA' || 
+            const isAnswerField = target.tagName === 'TEXTAREA' ||
                                  (target.tagName === 'INPUT' && target.type === 'text');
-            
             if (isAnswerField) {
                 const pastedText = e.clipboardData?.getData('text') || '';
                 if (pastedText) {
                     sendEvent('PASTE_DETECTED', 'Candidate pasted text', {
                         pastedText: pastedText.substring(0, 200)
                     });
+                    onPasteDetected?.(pastedText);
                 }
             }
         };
-        
         document.addEventListener('paste', handlePaste);
         return () => document.removeEventListener('paste', handlePaste);
-    }, [interviewActive, onPasteDetected, stompClient]);
+    }, []);
 
-    // Detect Alt+Tab and tab switching - JUST DETECT, never block
     useEffect(() => {
-        const handleBlur = () => {
-            if (interviewActive) {
-                sendEvent('WINDOW_BLUR', 'Window lost focus');
-            }
-        };
-        
+        const handleBlur = () => sendEvent('WINDOW_BLUR', 'Window lost focus');
         const handleVisibilityChange = () => {
-            if (interviewActive) {
-                if (document.hidden) {
-                    sendEvent('TAB_SWITCH', 'Switched to another tab');
-                }
-            }
+            if (document.hidden) sendEvent('TAB_SWITCH', 'Switched to another tab');
         };
-        
         window.addEventListener('blur', handleBlur);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        
         return () => {
             window.removeEventListener('blur', handleBlur);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [interviewActive, stompClient]);
+    }, []);
 
     return null;
 };

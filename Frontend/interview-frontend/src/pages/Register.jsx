@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import api from '../services/api'
 
@@ -14,7 +13,6 @@ export default function Register() {
   const [showPass,   setShowPass]   = useState(false)
   const [focused,    setFocused]    = useState('')
   const [touched,    setTouched]    = useState({ fullName: false, email: false, password: false })
-  const { login }   = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate    = useNavigate()
   const vantaRef    = useRef(null)
@@ -112,9 +110,12 @@ export default function Register() {
           await api.post('/users/upload-resume', fd, {
             headers: { Authorization: `Bearer ${data.token}`, 'Content-Type': 'multipart/form-data' }
           })
-        } catch (uploadErr) { if (uploadErr.name !== 'AbortError') setError('Account created but resume upload failed. You can upload later.') }
+        } catch (uploadErr) {
+          if (uploadErr.name !== 'AbortError') setError('Account created but resume upload failed. You can upload later.')
+        }
       }
-      login({ id: data.id, email: data.email, fullName: data.fullName, role: data.role }, data.token)
+      // ✅ FIX: Redirect to login page instead of auto-logging in
+      navigate('/login', { state: { message: 'Account created! Please sign in.' } })
     } catch (err) {
       if (err.response?.status === 409) setError('Email already exists. Sign in instead.')
       else if (err.response?.status === 400) setError(err.response?.data?.message || 'Invalid data.')
@@ -140,36 +141,21 @@ export default function Register() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-        /* Dark Theme (default) */
-        :root,
-        .dark {
-          --bg-dark: #0A0C12;
-          --bg-darker: #06080D;
-          --bg-surface: #0F121A;
-          --bg-surface-light: #151A24;
-          --border: rgba(255,255,255,0.05);
-          --border-light: rgba(255,255,255,0.08);
-          --text: #E8EDF2;
-          --text-dim: #8E9AA8;
-          --text-muted: #4A5568;
+        :root, .dark {
+          --bg-dark: #0A0C12; --bg-darker: #06080D; --bg-surface: #0F121A;
+          --bg-surface-light: #151A24; --border: rgba(255,255,255,0.05);
+          --border-light: rgba(255,255,255,0.08); --text: #E8EDF2;
+          --text-dim: #8E9AA8; --text-muted: #4A5568;
           --font-mono: 'JetBrains Mono', monospace;
           --font-display: 'Inter', system-ui, sans-serif;
           --font-body: 'Inter', system-ui, sans-serif;
-          --radius: 12px;
-          --radius-lg: 16px;
+          --radius: 12px; --radius-lg: 16px;
         }
-
-        /* Light Theme */
         .light {
-          --bg-dark: #F8FAFC;
-          --bg-darker: #FFFFFF;
-          --bg-surface: #FFFFFF;
-          --bg-surface-light: #F1F5F9;
-          --border: rgba(0, 0, 0, 0.08);
-          --border-light: rgba(0, 0, 0, 0.05);
-          --text: #0F172A;
-          --text-dim: #475569;
-          --text-muted: #64748B;
+          --bg-dark: #F8FAFC; --bg-darker: #FFFFFF; --bg-surface: #FFFFFF;
+          --bg-surface-light: #F1F5F9; --border: rgba(0,0,0,0.08);
+          --border-light: rgba(0,0,0,0.05); --text: #0F172A;
+          --text-dim: #475569; --text-muted: #64748B;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -177,14 +163,10 @@ export default function Register() {
         .rg-page {
           position: fixed; inset: 0;
           display: flex; align-items: center; justify-content: center;
-          background: var(--bg-darker);
-          font-family: var(--font-body);
+          background: var(--bg-darker); font-family: var(--font-body);
           overflow: hidden; z-index: 0;
         }
-        .rg-vanta {
-          position: absolute !important; inset: 0 !important;
-          width: 100% !important; height: 100% !important; z-index: 0 !important;
-        }
+        .rg-vanta { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; z-index: 0 !important; }
         .scene-bg {
           position: absolute; inset: 0; z-index: 1; pointer-events: none;
           background:
@@ -197,28 +179,16 @@ export default function Register() {
             radial-gradient(ellipse 50% 35% at 85% 80%, rgba(0,0,0,0.02) 0%, transparent 60%);
         }
 
-        /* particles */
         .rg-particles { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
-        .rg-particle  {
-          position: absolute; bottom: -10px; border-radius: 50%;
-          background: rgba(255,255,255,0.1);
-          animation: rgRise linear infinite;
-        }
+        .rg-particle { position: absolute; bottom: -10px; border-radius: 50%; background: rgba(255,255,255,0.1); animation: rgRise linear infinite; }
         .light .rg-particle { background: rgba(0,0,0,0.08); }
-        @keyframes rgRise {
-          0%   { transform: translateY(0) scale(1);        opacity: 0; }
-          10%  { opacity: 0.5; }
-          90%  { opacity: 0.15; }
-          100% { transform: translateY(-100vh) scale(0.5); opacity: 0; }
-        }
+        @keyframes rgRise { 0%{transform:translateY(0) scale(1);opacity:0} 10%{opacity:0.5} 90%{opacity:0.15} 100%{transform:translateY(-100vh) scale(0.5);opacity:0} }
 
-        /* rings */
         .rg-rings { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-        .rg-ring  { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,0.05); width: 80px; height: 80px; animation: rgRing 12s ease-out infinite; }
+        .rg-ring { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,0.05); width: 80px; height: 80px; animation: rgRing 12s ease-out infinite; }
         .light .rg-ring { border: 1px solid rgba(0,0,0,0.08); }
         @keyframes rgRing { 0%{width:80px;height:80px;opacity:0.4} 100%{width:900px;height:900px;opacity:0} }
 
-        /* top badge */
         .rg-top-badge {
           position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
           display: flex; align-items: center; gap: 8px; padding: 6px 18px;
@@ -226,51 +196,37 @@ export default function Register() {
           font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; color: var(--text-dim);
           white-space: nowrap; backdrop-filter: blur(12px); z-index: 10;
         }
-        .light .rg-top-badge {
-          background: rgba(255,255,255,0.9);
-          border: 1px solid rgba(0,0,0,0.08);
-        }
+        .light .rg-top-badge { background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.08); }
         .rg-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 6px rgba(16,185,129,0.5); flex-shrink: 0; animation: pulseDot 1.8s ease-in-out infinite; }
         @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(1.3)} }
 
-        /* stat chips */
         .rg-chip { position: absolute; display: flex; flex-direction: column; align-items: center; padding: 10px 16px; background: linear-gradient(145deg,var(--bg-surface) 0%,rgba(15,18,26,0.95) 100%); border: 1px solid var(--border-light); border-radius: 14px; backdrop-filter: blur(12px); z-index: 10; animation: chipFloat 5s ease-in-out infinite; }
         .light .rg-chip { background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%); border: 1px solid rgba(0,0,0,0.06); }
         .rg-chip-v { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--text); line-height: 1; }
         .rg-chip-l { font-size: 9px; color: var(--text-dim); font-weight: 600; letter-spacing: .5px; margin-top: 3px; font-family: var(--font-mono); }
-        .rg-chip-a { top: 18%; left: 5%;  animation-delay: 0s; }
+        .rg-chip-a { top: 18%; left: 5%; animation-delay: 0s; }
         .rg-chip-b { top: 18%; right: 5%; animation-delay: 1.6s; }
         .rg-chip-c { bottom: 22%; right: 5%; animation-delay: 3.2s; }
         @keyframes chipFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
 
-        /* scrollable card */
         .rg-card {
           position: relative; z-index: 20;
-          width: 460px; max-width: 94vw;
-          max-height: 92vh; overflow-y: auto; scrollbar-width: none;
+          width: 460px; max-width: 94vw; max-height: 92vh; overflow-y: auto; scrollbar-width: none;
           background: linear-gradient(145deg, var(--bg-surface) 0%, rgba(10,12,18,0.97) 100%);
-          border: 1px solid var(--border-light); border-radius: 20px;
-          padding: 36px 34px 30px;
+          border: 1px solid var(--border-light); border-radius: 20px; padding: 36px 34px 30px;
           backdrop-filter: blur(30px) saturate(160%);
           box-shadow: 0 8px 60px rgba(0,0,0,0.7), inset 0 0 80px rgba(255,255,255,0.02);
           animation: cardIn .5s cubic-bezier(.22,1,.36,1) both;
-          transition: border-color .3s, box-shadow .3s;
-          isolation: isolate;
+          transition: border-color .3s, box-shadow .3s; isolation: isolate;
         }
-        .light .rg-card {
-          background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%);
-          border: 1px solid rgba(0,0,0,0.08);
-          box-shadow: 0 8px 60px rgba(0,0,0,0.06), inset 0 0 80px rgba(0,0,0,0.01);
-        }
+        .light .rg-card { background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%); border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 8px 60px rgba(0,0,0,0.06), inset 0 0 80px rgba(0,0,0,0.01); }
         .rg-card::-webkit-scrollbar { display: none; }
         .rg-card::before {
           content: ''; position: absolute; inset: 0; border-radius: 20px;
           background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, transparent 70%);
           opacity: 0; transition: opacity .25s ease; pointer-events: none;
         }
-        .light .rg-card::before {
-          background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.01) 40%, transparent 70%);
-        }
+        .light .rg-card::before { background: radial-gradient(circle 200px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.01) 40%, transparent 70%); }
         .rg-card:hover { border-color: rgba(255,255,255,0.18); }
         .light .rg-card:hover { border-color: rgba(0,0,0,0.15); }
         .rg-card:hover::before { opacity: 1; }
@@ -279,7 +235,6 @@ export default function Register() {
         .card-shimmer { position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg,transparent,rgba(255,255,255,0.18),rgba(255,255,255,0.08),transparent); border-radius: 20px 20px 0 0; pointer-events: none; }
         .light .card-shimmer { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), rgba(0,0,0,0.05), transparent); }
 
-        /* brand */
         .rg-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; justify-content: center; }
         .rg-logo-box { width: 40px; height: 40px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-light); border-radius: 11px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(255,255,255,0.06); flex-shrink: 0; }
         .light .rg-logo-box { background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); }
@@ -291,7 +246,6 @@ export default function Register() {
         .rg-sub { font-size: 11px; color: var(--text-muted); text-align: left; margin-bottom: 22px; padding-left: 12px; border-left: 2px solid rgba(255,255,255,0.12); line-height: 1.5; font-family: var(--font-mono); letter-spacing: .03em; }
         .light .rg-sub { border-left: 2px solid rgba(0,0,0,0.1); }
 
-        /* fields */
         .rg-field { margin-bottom: 14px; }
         .rg-label { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 600; color: var(--text-muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 7px; font-family: var(--font-mono); transition: color .2s; }
         .rg-label svg { flex-shrink: 0; transition: color .2s; }
@@ -299,18 +253,8 @@ export default function Register() {
         .rg-field-active .rg-label svg { color: #8E9AA8; }
 
         .rg-iw { position: relative; display: flex; align-items: center; }
-        .rg-input {
-          width: 100%; padding: 11px 14px;
-          background: rgba(255,255,255,0.03);
-          border: 1px solid var(--border); border-radius: 10px;
-          color: var(--text); font-family: var(--font-body); font-size: 13px;
-          outline: none; transition: border-color .2s, box-shadow .2s, background .2s;
-        }
-        .light .rg-input {
-          background: rgba(0,0,0,0.02);
-          border: 1px solid rgba(0,0,0,0.08);
-          color: #0F172A;
-        }
+        .rg-input { width: 100%; padding: 11px 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color .2s, box-shadow .2s, background .2s; }
+        .light .rg-input { background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.08); color: #0F172A; }
         .rg-input::placeholder { color: var(--text-muted); }
         .rg-input:hover:not(:focus) { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); }
         .light .rg-input:hover:not(:focus) { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.03); }
@@ -323,16 +267,10 @@ export default function Register() {
         .rg-eye:hover { color: var(--text-dim); background: rgba(255,255,255,0.06); }
         .light .rg-eye:hover { background: rgba(0,0,0,0.04); }
 
-        .rg-field-err { font-size: 10px; color: #F87171; font-family: var(--font-mono); margin-top: 5px; }
+        .rg-field-err  { font-size: 10px; color: #F87171; font-family: var(--font-mono); margin-top: 5px; }
         .rg-field-hint { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 5px; }
 
-        /* upload zone */
-        .rg-upload {
-          display: flex; align-items: center; gap: 12px; padding: 11px 13px;
-          background: rgba(255,255,255,0.02);
-          border: 1px dashed rgba(255,255,255,0.1); border-radius: 10px;
-          cursor: pointer; transition: all .2s;
-        }
+        .rg-upload { display: flex; align-items: center; gap: 12px; padding: 11px 13px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 10px; cursor: pointer; transition: all .2s; }
         .light .rg-upload { background: rgba(0,0,0,0.01); border: 1px dashed rgba(0,0,0,0.1); }
         .rg-upload:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.04); }
         .light .rg-upload:hover { border-color: rgba(0,0,0,0.2); background: rgba(0,0,0,0.02); }
@@ -340,24 +278,12 @@ export default function Register() {
         .rg-upload-icon { width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; }
         .light .rg-upload-icon { background: rgba(0,0,0,0.03); }
 
-        /* error box */
+        .rg-success { display: flex; align-items: center; gap: 8px; padding: 10px 13px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 9px; color: #10B981; font-size: 12px; margin-bottom: 13px; animation: errIn .25s ease; font-family: var(--font-mono); }
         .rg-error { display: flex; align-items: center; gap: 8px; padding: 10px 13px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); border-radius: 9px; color: #F87171; font-size: 12px; margin-bottom: 13px; animation: errIn .25s ease; }
         @keyframes errIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
 
-        /* button */
-        .btn-launch {
-          width: 100%; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
-          cursor: pointer; transition: all .25s ease;
-          border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08);
-          color: #FFFFFF; font-family: var(--font-body);
-          position: relative; overflow: hidden; letter-spacing: .01em;
-          display: flex; align-items: center; justify-content: center; gap: 10px;
-        }
-        .light .btn-launch {
-          background: rgba(0,0,0,0.05);
-          border: 1px solid rgba(0,0,0,0.12);
-          color: #0F172A;
-        }
+        .btn-launch { width: 100%; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .25s ease; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08); color: #FFFFFF; font-family: var(--font-body); position: relative; overflow: hidden; letter-spacing: .01em; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .light .btn-launch { background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12); color: #0F172A; }
         .btn-launch::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle 150px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 40%, transparent 70%); opacity: 0; transition: opacity .25s ease; pointer-events: none; }
         .light .btn-launch::before { background: radial-gradient(circle 150px at var(--mouse-x,50%) var(--mouse-y,50%), rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.03) 40%, transparent 70%); }
         .btn-launch:hover:not(:disabled) { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.38); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(255,255,255,0.07); }
@@ -370,7 +296,6 @@ export default function Register() {
         .light .rg-spinner { border: 2px solid rgba(0,0,0,0.2); border-top-color: #0F172A; }
         @keyframes spin { to{transform:rotate(360deg)} }
 
-        /* divider */
         .rg-div { position: relative; text-align: center; margin: 16px 0; }
         .rg-div::before,.rg-div::after { content: ''; position: absolute; top: 50%; height: 1px; width: calc(50% - 18px); background: var(--border); }
         .rg-div::before{left:0} .rg-div::after{right:0}
@@ -380,7 +305,6 @@ export default function Register() {
         .rg-login a { color: var(--text-dim); font-weight: 600; text-decoration: none; transition: color .2s; }
         .rg-login a:hover { color: var(--text); }
 
-        /* trust */
         .rg-trust { display: flex; justify-content: center; gap: 7px; flex-wrap: wrap; margin: 14px 0 10px; }
         .rg-tbadge { display: flex; align-items: center; gap: 5px; padding: 3px 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 50px; font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); letter-spacing: .3px; transition: all .2s; }
         .light .rg-tbadge { background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06); }
@@ -406,7 +330,6 @@ export default function Register() {
 
       <div className="rg-page">
 
-        {/* Vanta */}
         <div ref={vantaRef} className="rg-vanta" />
         <div className="scene-bg" />
 
@@ -606,61 +529,32 @@ export default function Register() {
           </p>
         </div>
 
-        {/* Theme Toggle Button */}
+        {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
           style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 1000,
-            width: '44px',
-            height: '44px',
-            borderRadius: '40px',
-            background: theme === 'dark' 
-              ? 'linear-gradient(135deg, #0F121A, #151A24)'
-              : 'linear-gradient(135deg, #FFFFFF, #F1F5F9)',
-            border: theme === 'dark' 
-              ? '1px solid rgba(255,255,255,0.15)'
-              : '1px solid rgba(0,0,0,0.1)',
-            boxShadow: theme === 'dark'
-              ? '0 4px 20px rgba(0,0,0,0.3)'
-              : '0 4px 20px rgba(0,0,0,0.08)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s ease',
-            backdropFilter: 'blur(10px)',
+            position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000,
+            width: '44px', height: '44px', borderRadius: '40px',
+            background: theme === 'dark' ? 'linear-gradient(135deg, #0F121A, #151A24)' : 'linear-gradient(135deg, #FFFFFF, #F1F5F9)',
+            border: theme === 'dark' ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.1)',
+            boxShadow: theme === 'dark' ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.08)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.3s ease', backdropFilter: 'blur(10px)',
           }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'scale(1.1)'
-            e.currentTarget.style.boxShadow = theme === 'dark'
-              ? '0 0 20px rgba(255,255,255,0.15)'
-              : '0 0 20px rgba(0,0,0,0.15)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'scale(1)'
-            e.currentTarget.style.boxShadow = theme === 'dark'
-              ? '0 4px 20px rgba(0,0,0,0.3)'
-              : '0 4px 20px rgba(0,0,0,0.08)'
-          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = theme === 'dark' ? '0 0 20px rgba(255,255,255,0.15)' : '0 0 20px rgba(0,0,0,0.15)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = theme === 'dark' ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.08)' }}
         >
           {theme === 'dark' ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8EDF2" strokeWidth="2">
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
             </svg>
           ) : (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           )}
         </button>

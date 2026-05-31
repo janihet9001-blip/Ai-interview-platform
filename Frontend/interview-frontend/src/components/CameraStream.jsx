@@ -100,16 +100,23 @@ export default function CameraStream({ sessionId, userId }) {
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
       onConnect: () => {
-        stomp.subscribe(`/topic/webrtc/answer/${userId}`, (msg) => {
-          try {
-            const { signal } = JSON.parse(msg.body)
-            if (peerRef.current && !peerRef.current.destroyed) {
-              peerRef.current.signal(signal)
-            }
-          } catch (err) {
-            console.error('Failed to process WebRTC answer:', err)
-          }
-        })
+stomp.subscribe(`/topic/webrtc/answer/${userId}`, (msg) => {
+  try {
+    const { signal } = JSON.parse(msg.body)
+    if (peerRef.current && !peerRef.current.destroyed) {
+      peerRef.current.signal(signal)
+    } else {
+      // Peer not ready yet — retry once after a short delay
+      setTimeout(() => {
+        if (peerRef.current && !peerRef.current.destroyed) {
+          peerRef.current.signal(signal)
+        }
+      }, 2000)
+    }
+  } catch (err) {
+    console.error('Failed to process WebRTC answer:', err)
+  }
+})
       },
       onStompError: (frame) => { console.error('STOMP error:', frame) },
       onDisconnect: () => { console.log('WebSocket disconnected for camera stream') },

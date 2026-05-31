@@ -291,26 +291,6 @@ export default function Login() {
         }
         @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(1.3)} }
 
-        /* stat chips */
-        .lp-chip {
-          position: absolute; display: flex; flex-direction: column; align-items: center;
-          padding: 10px 16px;
-          background: linear-gradient(145deg, var(--bg-surface) 0%, rgba(15,18,26,0.95) 100%);
-          border: 1px solid var(--border-light); border-radius: 14px;
-          backdrop-filter: blur(12px); z-index: 10;
-          animation: chipFloat 5s ease-in-out infinite;
-        }
-        .light .lp-chip {
-          background: linear-gradient(145deg, #FFFFFF 0%, #F1F5F9 100%);
-          border: 1px solid rgba(0,0,0,0.06);
-        }
-        .lp-chip-v { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--text); line-height: 1; }
-        .lp-chip-l { font-size: 9px; color: var(--text-dim); font-weight: 600; letter-spacing: .5px; margin-top: 3px; font-family: var(--font-mono); }
-        .lp-chip-a { top: 18%; left: 5%;  animation-delay: 0s;   }
-        .lp-chip-b { top: 18%; right: 5%; animation-delay: 1.6s; }
-        .lp-chip-c { bottom: 22%; right: 5%; animation-delay: 3.2s; }
-        @keyframes chipFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-
         /* card */
         .login-card {
           position: relative; z-index: 20;
@@ -606,7 +586,6 @@ export default function Login() {
 
         @media(max-width:500px){
           .login-card{width:92vw;padding:28px 18px 24px}
-          .lp-chip-a{top:10%;left:2%} .lp-chip-b{top:10%;right:2%} .lp-chip-c{display:none}
           .login-h1{font-size:22px}
         }
       `}</style>
@@ -643,20 +622,6 @@ export default function Login() {
         <div className="lp-top-badge">
           <span className="lp-badge-dot" />
           SYSTEM ONLINE
-        </div>
-
-        {/* Stat chips */}
-        <div className="lp-chip lp-chip-a">
-          <span className="lp-chip-v">98%</span>
-          <span className="lp-chip-l">Accuracy</span>
-        </div>
-        <div className="lp-chip lp-chip-b">
-          <span className="lp-chip-v">2.4s</span>
-          <span className="lp-chip-l">Response</span>
-        </div>
-        <div className="lp-chip lp-chip-c">
-          <span className="lp-chip-v">50k+</span>
-          <span className="lp-chip-l">Interviews</span>
         </div>
 
         {/* Card */}

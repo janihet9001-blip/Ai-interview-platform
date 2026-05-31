@@ -28,7 +28,7 @@ export default defineConfig({
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' wss://localhost:5174 wss://localhost:8080 https://localhost:8080 wss://10.65.215.198:8080 https://10.65.215.198:8080 https://api.groq.com; frame-src 'self' blob:;"
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' wss://localhost:5174 wss://localhost:8080 https://localhost:8080 wss://10.65.215.198:8080 https://10.65.215.198:8080 wss://192.168.0.103:8080 https://192.168.0.103:8080 https://api.groq.com; frame-src 'self' blob:;"
     }
   },
   build: {

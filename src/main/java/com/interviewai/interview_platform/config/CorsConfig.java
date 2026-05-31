@@ -6,24 +6,34 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
+import java.util.Arrays;
+
 @Configuration
 public class CorsConfig {
 
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(java.util.Arrays.asList(
-                "http://localhost:*",
+
+        // Allow all the IPs and ports you need
+        config.setAllowedOriginPatterns(Arrays.asList(
                 "https://localhost:*",
-                "http://10.*.*.*:*",
-                "https://10.*.*.*:*"
+                "http://localhost:*",
+                "https://192.168.*:*",
+                "https://10.*:*",
+                "https://*.local:*"
         ));
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
+
+        config.setAllowedHeaders(Arrays.asList("*"));
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowCredentials(true);
+        config.setExposedHeaders(Arrays.asList("Authorization", "Set-Cookie"));
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/ws/**", config);  // This handles WebSocket CORS too
 
         return new CorsFilter(source);
     }

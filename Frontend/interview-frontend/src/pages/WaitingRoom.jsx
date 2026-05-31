@@ -26,8 +26,18 @@ export default function WaitingRoom() {
       try {
         const response = await API.get(`/interview/my-sessions`)
         const sessions = response.data || []
-        const activeSession = sessions.find(s => s.status === 'IN_PROGRESS')
-        if (activeSession) { navigate(`/interview/${activeSession.jobRole}?sessionId=${activeSession.id}`, { replace: true }); return }
+
+        // ✅ FIX: Pick the LATEST IN_PROGRESS session (highest startedAt),
+        // not just the first one found. This prevents getting stuck on an
+        // old abandoned session (e.g. #16) when a new one (#17) was launched.
+        const activeSession = sessions
+          .filter(s => s.status === 'IN_PROGRESS')
+          .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))[0]
+
+        if (activeSession) {
+          navigate(`/interview/${activeSession.jobRole}?sessionId=${activeSession.id}`, { replace: true })
+          return
+        }
       } catch (err) { console.error('Failed to check existing sessions:', err) }
       finally { setCheckingSession(false) }
     }
@@ -93,11 +103,12 @@ export default function WaitingRoom() {
       }
     }
     startCamera()
-    return () => {
-      mounted = false
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => { t.stop(); t.enabled = false }); streamRef.current = null }
-      if (videoRef.current) videoRef.current.srcObject = null
-    }
+return () => {
+  mounted = false;
+  streamRef.current?.getTracks().forEach(t => t.stop());
+  if (videoRef.current) videoRef.current.srcObject = null;
+  streamRef.current = null;
+};
   }, [])
 
   const toggleMute = useCallback(() => {

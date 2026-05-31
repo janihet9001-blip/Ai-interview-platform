@@ -154,9 +154,9 @@ export default function Interviews() {
   const currentRef = useRef(0)
   const chatEndRef = useRef(null)
   const sessionStarted = useRef(false)
-  const spokenRef = useRef(new Set())
   const speechQueueRef = useRef([])
   const isSpeakingRef = useRef(false)
+  const handleFinishRef = useRef(null)
   const [showCamera, setShowCamera] = useState(false)
 
   const accent = roleColors[role] || '#9CA3AF'
@@ -203,14 +203,12 @@ export default function Interviews() {
     window.speechSynthesis.speak(utterance)
   }
 
-  const botSay = (text) => {
-    if (spokenRef.current.has(text)) return
-    spokenRef.current.add(text)
-    setMessages(prev => [...prev, { from: 'bot', text }])
-    speechQueueRef.current.push(text)
-    processSpeechQueue()
-  }
-
+const botSay = (text) => {
+  const key = `${text}_${Date.now()}`
+  setMessages(prev => [...prev, { from: 'bot', text }])
+  speechQueueRef.current.push(text)
+  processSpeechQueue()
+}
   const interviewerSay = (text) => {
     setMessages(prev => [...prev, { from: 'interviewer', text }])
     speechQueueRef.current.push(text)
@@ -288,10 +286,13 @@ export default function Interviews() {
     }
   }
 
-  useEffect(() => {
-    const t = setInterval(() => setSeconds(s => s + 1), 1000)
-    return () => clearInterval(t)
-  }, [])
+  useEffect(() => { handleFinishRef.current = handleFinish }, [handleFinish])
+
+useEffect(() => {
+  if (stopped) return
+  const t = setInterval(() => setSeconds(s => s + 1), 1000)
+  return () => clearInterval(t)
+}, [stopped])
 
   useEffect(() => {
     const startSession = async () => {
@@ -328,7 +329,7 @@ export default function Interviews() {
               if (stoppedRef.current || ignoreFeedbackRef.current) { setSubmitting(false); return }
               if (pausedRef.current) { setSubmitting(false); return }
               if (feedback.questionId) { setAllAnswers(prev => { const u = { ...prev }; const e = u[feedback.questionId] || {}; u[feedback.questionId] = { ...e, score: feedback.score, aiFeedback: feedback.feedback }; return u }) }
-              if (feedback.sessionCompleted) { setTimeout(() => { botSay('Interview complete. You answered all questions. Analyzing your answers...'); handleFinish() }, 500) }
+              if (feedback.sessionCompleted) { setTimeout(() => { botSay('Interview complete...'); handleFinishRef.current?.() }, 500) }
               else {
                 const nextIndex = currentRef.current; const nextQ = questionsRef.current[nextIndex]
                 if (nextQ) { setTimeout(() => { if (!pausedRef.current && !stoppedRef.current && !ignoreFeedbackRef.current) botSay(nextQ.questiontext) }, 2000) }
@@ -339,7 +340,7 @@ export default function Interviews() {
               ignoreFeedbackRef.current = true; pausedRef.current = true; stoppedRef.current = true; setPaused(true); setStopped(true)
               speechQueueRef.current = []; isSpeakingRef.current = false; window.speechSynthesis.cancel()
               botSay('The interviewer has ended the session. Analyzing your answers...')
-              setTimeout(() => handleFinish(), 3000)
+setTimeout(() => handleFinishRef.current?.(), 3000)
             })
             client.subscribe(`/topic/recruiter-question/${sessionData.id}`, (message) => {
               const data = JSON.parse(message.body); const question = data.question || ''; const questionId = data.questionId || null
@@ -347,8 +348,7 @@ export default function Interviews() {
             })
             client.subscribe(`/topic/pause/${sessionData.id}`, (message) => {
               const data = JSON.parse(message.body)
-              if (data.action === 'STOP') { ignoreFeedbackRef.current = true; pausedRef.current = true; stoppedRef.current = true; setPaused(true); setStopped(true); botSay('Your interview session has ended. Analyzing your answers...'); handleFinish(); return }
-              if (data.action === 'PAUSE') { ignoreFeedbackRef.current = true; pausedRef.current = true; setPaused(true); return }
+if (data.action === 'STOP') { ignoreFeedbackRef.current = true; pausedRef.current = true; stoppedRef.current = true; setPaused(true); setStopped(true); botSay('Your interview session has ended. Analyzing your answers...'); handleFinishRef.current?.(); return }              if (data.action === 'PAUSE') { ignoreFeedbackRef.current = true; pausedRef.current = true; setPaused(true); return }
               if (data.action === 'RESUME' || data.action === 'CONTINUE') {
                 recruiterQuestionRef.current = null; recruiterQuestionIdRef.current = null; setRecruiterQuestion(null)
                 setTimeout(() => {
@@ -443,7 +443,7 @@ export default function Interviews() {
     )
   }
 
-  const isTextareaDisabled = submitting || stopped || isAnalyzing || (paused && !recruiterQuestionRef.current)
+const isTextareaDisabled = submitting || stopped || isAnalyzing || (paused && !recruiterQuestion)
 
   return (
     <>
